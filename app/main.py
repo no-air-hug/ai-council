@@ -176,7 +176,9 @@ def register_routes(app: Flask):
         base_path = app.config["AI_COUNCIL_BASE_PATH"]
         config_manager = app.config["AI_COUNCIL_CONFIG_MANAGER"]
         
-        data = request.get_json()
+        data = request.get_json(silent=True)
+        if data is None:
+            return jsonify({"error": "Invalid or missing JSON payload"}), 400
         prompt = data.get("prompt", "")
         persona_assignments = data.get("personas", {})
         debate_rounds = data.get("debate_rounds")  # Optional, defaults to config value
@@ -192,24 +194,27 @@ def register_routes(app: Flask):
         if not prompt:
             return jsonify({"error": "Prompt is required"}), 400
         
-        # Create orchestrator with potentially overridden token settings (UI overrides config)
-        orchestrator = Orchestrator(
-            base_path, 
-            config_manager.config,
-            worker_max_tokens=worker_max_tokens,
-            synth_max_tokens=synth_max_tokens,
-            worker_context_window=worker_context_window,
-            synth_context_window=synth_context_window
-        )
-        session_id = orchestrator.create_session(
-            prompt, 
-            persona_assignments,
-            debate_rounds=debate_rounds,
-            argument_rounds=argument_rounds,
-            collaboration_rounds=collaboration_rounds,
-            axiom_rounds=axiom_rounds,
-            worker_count=worker_count
-        )
+        try:
+            # Create orchestrator with potentially overridden token settings (UI overrides config)
+            orchestrator = Orchestrator(
+                base_path, 
+                config_manager.config,
+                worker_max_tokens=worker_max_tokens,
+                synth_max_tokens=synth_max_tokens,
+                worker_context_window=worker_context_window,
+                synth_context_window=synth_context_window
+            )
+            session_id = orchestrator.create_session(
+                prompt, 
+                persona_assignments,
+                debate_rounds=debate_rounds,
+                argument_rounds=argument_rounds,
+                collaboration_rounds=collaboration_rounds,
+                axiom_rounds=axiom_rounds,
+                worker_count=worker_count
+            )
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
         
         # Store orchestrator for this session
         if "sessions" not in app.config:
@@ -548,4 +553,3 @@ def register_routes(app: Flask):
             "mode": config_manager.config.mode.value,
             "ollama": ollama_status
         })
-
