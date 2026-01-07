@@ -4,6 +4,7 @@ Coordinates the full multi-agent pipeline execution.
 """
 
 import uuid
+import difflib
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Generator
@@ -12,8 +13,8 @@ from enum import Enum
 from .config import AppConfig
 from .models.runtime import OllamaRuntime
 from .models.registry import ModelRegistry
-from .agents.worker import Worker
-from .agents.synthesizer import Synthesizer
+from .agents.worker import Worker, WorkerRefinement
+from .agents.synthesizer import Synthesizer, SynthesizerQuestions
 from .personas.manager import PersonaManager
 from .voting.voter import Voter, VoteAction
 from .utils.memory import MemoryMonitor
@@ -104,6 +105,9 @@ class Orchestrator:
         self.argument_rounds: int = 1  # Configurable argumentation rounds
         self.collaboration_rounds: int = 1  # Configurable collaboration rounds
         self.axiom_rounds: int = 1  # Configurable axiom analysis rounds
+        self.refinement_similarity_threshold: float = getattr(
+            self.config.mode_config.pipeline, "refinement_similarity_threshold", 0.92
+        )
         
         # Agents
         self.workers: Dict[str, Worker] = {}
@@ -183,6 +187,9 @@ class Orchestrator:
         self.argument_rounds = argument_rounds or getattr(self.config.mode_config.pipeline, 'argumentation_rounds', 1)
         self.collaboration_rounds = collaboration_rounds or getattr(self.config.mode_config.pipeline, 'collaboration_rounds', 1)
         self.axiom_rounds = axiom_rounds or getattr(self.config.mode_config.pipeline, 'axiom_rounds', 1)
+        self.refinement_similarity_threshold = getattr(
+            self.config.mode_config.pipeline, "refinement_similarity_threshold", 0.92
+        )
         
         # Initialize logger
         self.logger = SessionLogger(
@@ -284,7 +291,17 @@ class Orchestrator:
         self.current_stage = PipelineStage.SYNTH_QUESTIONS
         yield {"type": "stage_start", "stage": "synth_questions"}
         
-        questions = self.synthesizer.generate_questions(drafts)
+        synth_input_text = str(drafts)
+        synth_input_hash = self.logger.compute_hash(synth_input_text)
+        cached_questions_entry = self.logger.find_entry(
+            stage="synth_questions",
+            agent_id="synthesizer",
+            input_hash=synth_input_hash
+        )
+        if cached_questions_entry:
+            questions = SynthesizerQuestions.from_json(cached_questions_entry.output_text)
+        else:
+            questions = self.synthesizer.generate_questions(drafts)
         
         # Emit synthesizer token usage
         synth_tokens = self.synthesizer.get_last_token_usage()
@@ -295,13 +312,14 @@ class Orchestrator:
             "context_limit": self.synth_context_window
         }
         
-        self.logger.log(
-            stage="synth_questions",
-            agent_id="synthesizer",
-            input_text=str(drafts),
-            output_text=questions.raw_text,
-            memory_usage_mb=self.memory_monitor.get_memory_mb()
-        )
+        if not cached_questions_entry:
+            self.logger.log(
+                stage="synth_questions",
+                agent_id="synthesizer",
+                input_text=synth_input_text,
+                output_text=questions.raw_text,
+                memory_usage_mb=self.memory_monitor.get_memory_mb()
+            )
         
         self._stage_outputs["questions"] = questions.to_dict()
         yield {
@@ -319,6 +337,7 @@ class Orchestrator:
             yield {"type": "stage_start", "stage": f"worker_refinement_{loop + 1}"}
             
             refinements = {}
+            similarity_hits = []
             for worker_id, worker in self.workers.items():
                 worker_questions = questions.questions_by_worker.get(worker_id, [])
                 
@@ -334,24 +353,34 @@ class Orchestrator:
                 if prev_round_feedback:
                     user_guidance = prev_round_feedback.get("worker_feedback", {}).get(worker_id)
                 
-                refinement = worker.refine(worker_questions, user_guidance=user_guidance)
-                refinements[worker_id] = refinement.to_dict()
-                
-                # Build full input text for logging (includes draft + questions)
                 current_draft_summary = worker.current_draft.summary if worker.current_draft else "No draft"
                 full_input_text = f"CURRENT PROPOSAL:\n{current_draft_summary}\n\nSYNTHESIZER QUESTIONS:\n" + "\n".join(f"- {q}" for q in worker_questions)
                 if user_guidance:
                     full_input_text += f"\n\nUSER FEEDBACK:\n{user_guidance}"
-                
-                self.logger.log(
+
+                input_hash = self.logger.compute_hash(full_input_text)
+                cached_refinement_entry = self.logger.find_entry(
                     stage="refinement",
                     agent_id=worker_id,
-                    input_text=full_input_text,
-                    output_text=refinement.raw_text,
-                    persona_id=worker.persona.id if worker.persona else None,
-                    persona_name=worker.persona.name if worker.persona else None,
-                    memory_usage_mb=self.memory_monitor.get_memory_mb()
+                    input_hash=input_hash
                 )
+                if cached_refinement_entry:
+                    refinement = WorkerRefinement.from_json(cached_refinement_entry.output_text)
+                    if not worker.refinements or worker.refinements[-1].raw_text != refinement.raw_text:
+                        worker.refinements.append(refinement)
+                else:
+                    refinement = worker.refine(worker_questions, user_guidance=user_guidance)
+                    self.logger.log(
+                        stage="refinement",
+                        agent_id=worker_id,
+                        input_text=full_input_text,
+                        output_text=refinement.raw_text,
+                        persona_id=worker.persona.id if worker.persona else None,
+                        persona_name=worker.persona.name if worker.persona else None,
+                        memory_usage_mb=self.memory_monitor.get_memory_mb()
+                    )
+
+                refinements[worker_id] = refinement.to_dict()
                 
                 yield {
                     "type": "worker_complete",
@@ -359,9 +388,22 @@ class Orchestrator:
                     "refinement": refinement.to_dict(),
                     "tokens": worker.get_last_token_usage()
                 }
+
+                if len(worker.refinements) > 1:
+                    previous = worker.refinements[-2].raw_text
+                    current = worker.refinements[-1].raw_text
+                    similarity = difflib.SequenceMatcher(a=previous, b=current).ratio()
+                    similarity_hits.append(similarity >= self.refinement_similarity_threshold)
             
             self._stage_outputs[f"refinements_{loop + 1}"] = refinements
             yield {"type": "stage_complete", "stage": f"worker_refinement_{loop + 1}"}
+
+            if similarity_hits and all(similarity_hits):
+                yield {
+                    "type": "info",
+                    "message": "Refinement halted due to high similarity with previous outputs."
+                }
+                break
             
             # After each round, pause for optional user feedback
             # Only pause if there are more rounds to go
@@ -925,6 +967,7 @@ class Orchestrator:
                 yield {"type": "stage_start", "stage": f"worker_refinement_{loop + 1}"}
                 
                 refinements = {}
+                similarity_hits = []
                 for worker_id, worker in self.workers.items():
                     worker_questions = questions.questions_by_worker.get(worker_id, []) if questions else []
                     
@@ -940,24 +983,34 @@ class Orchestrator:
                     if prev_round_feedback:
                         user_guidance = prev_round_feedback.get("worker_feedback", {}).get(worker_id)
                     
-                    refinement = worker.refine(worker_questions, user_guidance=user_guidance)
-                    refinements[worker_id] = refinement.to_dict()
-                    
-                    # Build full input text for logging (includes draft + questions)
                     current_draft_summary = worker.current_draft.summary if worker.current_draft else "No draft"
                     full_input_text = f"CURRENT PROPOSAL:\n{current_draft_summary}\n\nSYNTHESIZER QUESTIONS:\n" + "\n".join(f"- {q}" for q in worker_questions)
                     if user_guidance:
                         full_input_text += f"\n\nUSER FEEDBACK:\n{user_guidance}"
-                    
-                    self.logger.log(
+
+                    input_hash = self.logger.compute_hash(full_input_text)
+                    cached_refinement_entry = self.logger.find_entry(
                         stage="refinement",
                         agent_id=worker_id,
-                        input_text=full_input_text,
-                        output_text=refinement.raw_text,
-                        persona_id=worker.persona.id if worker.persona else None,
-                        persona_name=worker.persona.name if worker.persona else None,
-                        memory_usage_mb=self.memory_monitor.get_memory_mb()
+                        input_hash=input_hash
                     )
+                    if cached_refinement_entry:
+                        refinement = WorkerRefinement.from_json(cached_refinement_entry.output_text)
+                        if not worker.refinements or worker.refinements[-1].raw_text != refinement.raw_text:
+                            worker.refinements.append(refinement)
+                    else:
+                        refinement = worker.refine(worker_questions, user_guidance=user_guidance)
+                        self.logger.log(
+                            stage="refinement",
+                            agent_id=worker_id,
+                            input_text=full_input_text,
+                            output_text=refinement.raw_text,
+                            persona_id=worker.persona.id if worker.persona else None,
+                            persona_name=worker.persona.name if worker.persona else None,
+                            memory_usage_mb=self.memory_monitor.get_memory_mb()
+                        )
+
+                    refinements[worker_id] = refinement.to_dict()
                     
                     yield {
                         "type": "worker_complete",
@@ -965,9 +1018,22 @@ class Orchestrator:
                         "refinement": refinement.to_dict(),
                         "tokens": worker.get_last_token_usage()
                     }
+
+                    if len(worker.refinements) > 1:
+                        previous = worker.refinements[-2].raw_text
+                        current = worker.refinements[-1].raw_text
+                        similarity = difflib.SequenceMatcher(a=previous, b=current).ratio()
+                        similarity_hits.append(similarity >= self.refinement_similarity_threshold)
                 
                 self._stage_outputs[f"refinements_{loop + 1}"] = refinements
                 yield {"type": "stage_complete", "stage": f"worker_refinement_{loop + 1}"}
+
+                if similarity_hits and all(similarity_hits):
+                    yield {
+                        "type": "info",
+                        "message": "Refinement halted due to high similarity with previous outputs."
+                    }
+                    break
                 
                 # Pause for feedback between rounds (not after last)
                 if loop < total_rounds - 1:
@@ -1015,11 +1081,18 @@ class Orchestrator:
         6. Axiom Analysis - Analyze underlying axioms (in finalize)
         """
         # Gather refined proposals
-        refined_proposals = {
-            worker_id: {"summary": worker.current_draft.summary}
-            for worker_id, worker in self.workers.items()
-            if worker.current_draft
-        }
+        refined_proposals = {}
+        for worker_id, worker in self.workers.items():
+            if not worker.current_draft:
+                continue
+            latest_refinement = worker.refinements[-1] if worker.refinements else None
+            refined_proposals[worker_id] = {
+                "summary": worker.current_draft.summary,
+                "answers_to_questions": latest_refinement.answers_to_questions if latest_refinement else {},
+                "patch_notes": latest_refinement.patch_notes if latest_refinement else [],
+                "new_risks": latest_refinement.new_risks if latest_refinement else [],
+                "new_tradeoffs": latest_refinement.new_tradeoffs if latest_refinement else []
+            }
         
         # Stage 1: Candidate Synthesis
         self.current_stage = PipelineStage.CANDIDATE_SYNTHESIS
@@ -1782,8 +1855,8 @@ class Orchestrator:
             if worker.refinements:
                 key_changes = []
                 for ref in worker.refinements[-2:]:  # Last 2 refinements
-                    if hasattr(ref, 'changes_made') and ref.changes_made:
-                        key_changes.extend(ref.changes_made[:2])
+                    if getattr(ref, "patch_notes", None):
+                        key_changes.extend(ref.patch_notes[:2])
                 if key_changes:
                     parts.append(f"\nKey refinements: {'; '.join(key_changes[:3])}")
             
@@ -1865,8 +1938,8 @@ class Orchestrator:
             if worker.refinements:
                 changes = []
                 for ref in worker.refinements[-2:]:  # Last 2 refinements
-                    if hasattr(ref, 'changes_made') and ref.changes_made:
-                        changes.extend(ref.changes_made[:2])
+                    if getattr(ref, "patch_notes", None):
+                        changes.extend(ref.patch_notes[:2])
                 if changes:
                     context_parts.append(f"Key Changes: {'; '.join(changes[:4])}")
         
@@ -2172,5 +2245,3 @@ class Orchestrator:
             }
         
         return state
-
-

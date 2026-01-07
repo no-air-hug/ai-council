@@ -173,6 +173,17 @@ class SessionLogger:
         if stage:
             return [e for e in self._entries if e.stage == stage]
         return self._entries.copy()
+
+    def find_entry(self, stage: str, agent_id: str, input_hash: str) -> Optional[LogEntry]:
+        """Find a matching entry by stage, agent, and input hash."""
+        for entry in self._entries:
+            if entry.stage == stage and entry.agent_id == agent_id and entry.input_hash == input_hash:
+                return entry
+        return None
+
+    def has_entry(self, stage: str, agent_id: str, input_hash: str) -> bool:
+        """Check if a matching entry exists by stage, agent, and input hash."""
+        return self.find_entry(stage, agent_id, input_hash) is not None
     
     def get_session_summary(self) -> Dict[str, Any]:
         """Get a summary of the session for export."""
@@ -257,5 +268,4 @@ class SessionLogger:
                 f.write(json.dumps(entry, ensure_ascii=False) + '\n')
         
         return len(all_entries)
-
 

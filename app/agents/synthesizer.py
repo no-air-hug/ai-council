@@ -20,6 +20,23 @@ class SynthesizerQuestions:
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
+    @classmethod
+    def from_json(cls, text: str) -> "SynthesizerQuestions":
+        """Parse structured JSON output."""
+        try:
+            data = json.loads(text)
+            return cls(
+                questions_by_worker=data.get("questions_by_worker", {}),
+                overall_observations=data.get("overall_observations", ""),
+                raw_text=text
+            )
+        except (json.JSONDecodeError, KeyError, ValueError):
+            return cls(
+                questions_by_worker={},
+                overall_observations=text,
+                raw_text=text
+            )
+
 
 @dataclass
 class Candidate:
@@ -86,7 +103,7 @@ Respond in JSON format:
 REFINED PROPOSALS:
 {proposals}
 
-Remember: You've already seen the initial proposals and asked questions about them. These are the REFINED versions that address your questions. Now synthesize them into distinct candidates.
+Remember: You've already seen the initial proposals and asked questions about them. These include delta-only refinements (patch notes, new risks, new tradeoffs) that address your questions. Use those deltas to update each worker's proposal when synthesizing candidates.
 
 Create 3-4 distinct candidates that represent the best approaches. Each candidate can combine ideas from multiple workers. Consider how the refinements address the concerns you raised earlier.
 
@@ -129,7 +146,7 @@ Respond in JSON format:
     }}
 }}"""
 
-    FINAL_OUTPUT_PROMPT = """Generate the comprehensive final response synthesizing the entire council discussion.
+    FINAL_OUTPUT_PROMPT = """Generate the comprehensive final response for the WINNING candidate ONLY.
 
 === FULL CONVERSATION CONTEXT ===
 {conversation_context}
@@ -147,10 +164,15 @@ Respond in JSON format:
 === AXIOM ANALYSIS SUMMARY ===
 {axiom_summary}
 
+Hard constraints:
+- Use ONLY the selected candidate's approach in the final solution.
+- Do NOT merge in ideas from other candidates unless explicitly instructed to operate in merge mode.
+- If mentioning alternatives, add a brief "Alternatives not chosen" section (1-2 lines each) without blending them into the final plan.
+
 Generate a comprehensive final response that:
-1. Incorporates insights from all workers' refinement journey
-2. Addresses argumentation points and resolved conflicts
-3. Reflects collaboration outcomes
+1. Implements the selected candidate's approach faithfully
+2. Addresses relevant argumentation points without changing the selected approach
+3. Reflects collaboration outcomes only if they are already part of the selected candidate
 4. Integrates user feedback and direction throughout
 5. Acknowledges key axioms and assumptions
 6. Provides clear, actionable conclusions
@@ -354,7 +376,11 @@ Respond in JSON format:
             SynthesizerQuestions with follow-up questions per worker.
         """
         refinements_text = "\n\n".join(
-            f"=== {worker_id} ===\n{ref.get('updated_summary', ref.get('raw_text', str(ref)))}"
+            f"=== {worker_id} ===\n"
+            f"answers: {ref.get('answers_to_questions', {})}\n"
+            f"patch_notes: {ref.get('patch_notes', [])}\n"
+            f"new_risks: {ref.get('new_risks', [])}\n"
+            f"new_tradeoffs: {ref.get('new_tradeoffs', [])}"
             for worker_id, ref in refinements.items()
         )
         
@@ -421,7 +447,12 @@ Respond in JSON format:
             List of synthesized candidates.
         """
         proposals_text = "\n\n".join(
-            f"=== {worker_id} ===\n{proposal.get('summary', proposal)}"
+            f"=== {worker_id} ===\n"
+            f"Summary: {proposal.get('summary', '')}\n"
+            f"Patch notes: {proposal.get('patch_notes', [])}\n"
+            f"Answers: {proposal.get('answers_to_questions', {})}\n"
+            f"New risks: {proposal.get('new_risks', [])}\n"
+            f"New tradeoffs: {proposal.get('new_tradeoffs', [])}"
             for worker_id, proposal in refined_proposals.items()
         )
         
@@ -984,5 +1015,3 @@ USER FEEDBACK (incorporate this into your commentary):
             "scores": {k: v.to_dict() for k, v in self.scores.items()},
             "final_output": self.final_output
         }
-
-
