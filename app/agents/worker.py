@@ -56,6 +56,7 @@ class WorkerRefinement:
     patch_notes: list
     new_risks: list
     new_tradeoffs: list
+    updated_summary: Optional[str] = None
     raw_text: str = ""
     
     def to_dict(self) -> Dict[str, Any]:
@@ -71,6 +72,7 @@ class WorkerRefinement:
                 patch_notes=data.get("patch_notes", []),
                 new_risks=data.get("new_risks", []),
                 new_tradeoffs=data.get("new_tradeoffs", []),
+                updated_summary=data.get("updated_summary"),
                 raw_text=text
             )
         except (json.JSONDecodeError, KeyError, ValueError):
@@ -79,6 +81,7 @@ class WorkerRefinement:
                 patch_notes=[],
                 new_risks=[],
                 new_tradeoffs=[],
+                updated_summary=None,
                 raw_text=text
             )
 

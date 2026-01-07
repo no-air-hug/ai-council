@@ -437,7 +437,7 @@ class Orchestrator:
                         wid: {
                             "display_id": w.display_id,
                             "summary": w.current_draft.summary if w.current_draft else None,
-                            "refinement": refinements.get(wid, {})
+                            "refinement": self._build_refinement_payload(refinements.get(wid))
                         }
                         for wid, w in self.workers.items()
                     },
@@ -1056,7 +1056,7 @@ class Orchestrator:
                             wid: {
                                 "display_id": w.display_id,
                                 "summary": w.current_draft.summary if w.current_draft else None,
-                                "refinement": refinements.get(wid, {})
+                                "refinement": self._build_refinement_payload(refinements.get(wid))
                             }
                             for wid, w in self.workers.items()
                         },
@@ -2180,6 +2180,28 @@ class Orchestrator:
             "candidates_count": len(self.synthesizer.candidates) if self.synthesizer else 0,
             "memory": self.memory_monitor.get_status()
         }
+
+    def _build_refinement_payload(self, refinement: Optional[Any]) -> Dict[str, Any]:
+        if not refinement:
+            return {
+                "answers_to_questions": {},
+                "patch_notes": [],
+                "new_risks": [],
+                "new_tradeoffs": []
+            }
+
+        refinement_data = refinement.to_dict() if hasattr(refinement, "to_dict") else dict(refinement)
+        payload = {
+            "answers_to_questions": refinement_data.get("answers_to_questions", {}),
+            "patch_notes": refinement_data.get("patch_notes", []),
+            "new_risks": refinement_data.get("new_risks", []),
+            "new_tradeoffs": refinement_data.get("new_tradeoffs", [])
+        }
+
+        if refinement_data.get("updated_summary"):
+            payload["updated_summary"] = refinement_data.get("updated_summary")
+
+        return payload
     
     def get_full_state(self) -> Dict[str, Any]:
         """
@@ -2239,7 +2261,8 @@ class Orchestrator:
             state["round_worker_outputs"] = {
                 wid: {
                     "display_id": w.display_id,
-                    "summary": w.current_draft.summary if w.current_draft else None
+                    "summary": w.current_draft.summary if w.current_draft else None,
+                    "refinement": self._build_refinement_payload(w.refinements[-1] if w.refinements else None)
                 }
                 for wid, w in self.workers.items()
             }

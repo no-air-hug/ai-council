@@ -988,6 +988,42 @@
         window.aiCouncil.voting.buildVotingUI(state.candidates, state.aiScores, state.arguments, state.workers);
         showView('voting');
     }
+
+    function renderRefinementList(items, emptyLabel) {
+        if (!items || items.length === 0) {
+            return `<div class="round-worker-empty">${escapeHtml(emptyLabel)}</div>`;
+        }
+
+        const listItems = items
+            .map(item => `<li>${escapeHtml(item)}</li>`)
+            .join('');
+        return `<ul class="round-worker-list">${listItems}</ul>`;
+    }
+
+    function renderRefinementAnswers(answers) {
+        const entries = answers ? Object.entries(answers) : [];
+        if (entries.length === 0) {
+            return '<div class="round-worker-empty">No answers provided.</div>';
+        }
+
+        return entries
+            .map(([question, answer]) => `
+                <div class="round-worker-qa">
+                    <div class="round-worker-question">Q: ${escapeHtml(question)}</div>
+                    <div class="round-worker-answer">A: ${escapeHtml(answer)}</div>
+                </div>
+            `)
+            .join('');
+    }
+
+    function renderRefinementSection(title, bodyHtml, isOpen = false) {
+        return `
+            <details class="round-worker-detail" ${isOpen ? 'open' : ''}>
+                <summary>${escapeHtml(title)}</summary>
+                <div class="round-worker-detail-body">${bodyHtml}</div>
+            </details>
+        `;
+    }
     
     // Show round feedback modal
     function showRoundFeedbackModal(event) {
@@ -1013,12 +1049,31 @@
             
             const summary = workerData.summary || 'No output yet';
             const displayId = workerData.display_id || workerId;
+            const refinement = workerData.refinement || {};
+            const updatedSummary = refinement.updated_summary || workerData.updated_summary || '';
+            const refinementSections = [
+                renderRefinementSection('Answers to questions', renderRefinementAnswers(refinement.answers_to_questions), true),
+                renderRefinementSection('Patch notes', renderRefinementList(refinement.patch_notes, 'No patch notes recorded.')),
+                renderRefinementSection('New risks', renderRefinementList(refinement.new_risks, 'No new risks recorded.')),
+                renderRefinementSection('New tradeoffs', renderRefinementList(refinement.new_tradeoffs, 'No new tradeoffs recorded.'))
+            ];
+            if (updatedSummary) {
+                refinementSections.unshift(
+                    renderRefinementSection('Updated summary', `<p>${escapeHtml(updatedSummary)}</p>`, true)
+                );
+            }
             
             card.innerHTML = `
                 <div class="round-worker-header">
                     <span class="round-worker-name">${escapeHtml(displayId)}</span>
                 </div>
-                <div class="round-worker-output">${escapeHtml(summary)}</div>
+                <div class="round-worker-output">
+                    <div class="round-worker-output-label">Summary</div>
+                    <div class="round-worker-output-text">${escapeHtml(summary)}</div>
+                </div>
+                <div class="round-worker-refinements">
+                    ${refinementSections.join('')}
+                </div>
                 <div class="round-worker-feedback">
                     <textarea 
                         data-worker="${workerId}"
