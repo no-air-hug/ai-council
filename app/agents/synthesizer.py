@@ -224,6 +224,17 @@ Write the final response directly, not in JSON format."""
     def get_last_token_usage(self) -> Dict[str, int]:
         """Get token usage from the last operation."""
         return self._last_token_usage.copy()
+
+    def reset_context(self, reason: str = "") -> None:
+        """Clear accumulated context to avoid cross-stage bleed."""
+        if self._context_messages:
+            self._context_messages = []
+            if reason:
+                self._history.append({
+                    "stage": "context_reset",
+                    "input": reason,
+                    "output": ""
+                })
     
     def _add_to_context(self, role: str, content: str) -> None:
         """Add a message to the synthesizer's accumulated context."""
@@ -292,6 +303,7 @@ Be structured, objective, and thorough. Prioritize clarity over creativity."""
         Returns:
             SynthesizerQuestions with questions per worker.
         """
+        self.reset_context("generate_questions")
         proposals_text = "\n\n".join(
             f"=== {worker_id} ===\n{draft.get('summary', draft)}"
             for worker_id, draft in worker_drafts.items()
@@ -338,10 +350,13 @@ Be structured, objective, and thorough. Prioritize clarity over creativity."""
         
         return questions
     
-    FOLLOW_UP_QUESTIONS_PROMPT = """Based on the workers' refinements, generate follow-up questions to help them improve further.
+FOLLOW_UP_QUESTIONS_PROMPT = """Based on the workers' refinements and any user feedback, generate follow-up questions to help them improve further.
 
 PREVIOUS QUESTIONS ASKED:
 {previous_questions}
+
+USER FEEDBACK DIRECTIVES:
+{user_feedback}
 
 WORKER REFINEMENTS:
 {refinements}
@@ -363,7 +378,8 @@ Respond in JSON format:
     def generate_follow_up_questions(
         self,
         refinements: Dict[str, Dict[str, Any]],
-        previous_questions: 'SynthesizerQuestions'
+        previous_questions: 'SynthesizerQuestions',
+        user_feedback: Optional[Dict[str, str]] = None
     ) -> SynthesizerQuestions:
         """
         Generate follow-up questions based on worker refinements.
@@ -371,10 +387,12 @@ Respond in JSON format:
         Args:
             refinements: Dict mapping worker_id to their refinement output.
             previous_questions: Previous questions that were asked.
+            user_feedback: Optional user feedback per worker to direct questions.
         
         Returns:
             SynthesizerQuestions with follow-up questions per worker.
         """
+        self.reset_context("generate_follow_up_questions")
         refinements_text = "\n\n".join(
             f"=== {worker_id} ===\n"
             f"answers: {ref.get('answers_to_questions', {})}\n"
@@ -388,9 +406,16 @@ Respond in JSON format:
             f"{wid}: {', '.join(qs)}"
             for wid, qs in (previous_questions.questions_by_worker.items() if previous_questions else {})
         )
+
+        feedback_text = "None"
+        if user_feedback:
+            feedback_lines = [f"{wid}: {fb}" for wid, fb in user_feedback.items() if fb]
+            if feedback_lines:
+                feedback_text = "\n".join(feedback_lines)
         
         full_prompt = self.FOLLOW_UP_QUESTIONS_PROMPT.format(
             previous_questions=prev_q_text or "None",
+            user_feedback=feedback_text,
             refinements=refinements_text
         )
         
@@ -446,6 +471,7 @@ Respond in JSON format:
         Returns:
             List of synthesized candidates.
         """
+        self.reset_context("synthesize_candidates")
         proposals_text = "\n\n".join(
             f"=== {worker_id} ===\n"
             f"Summary: {proposal.get('summary', '')}\n"
@@ -531,6 +557,7 @@ Respond in JSON format:
         Returns:
             CandidateScore with detailed scoring.
         """
+        self.reset_context(f"score_candidate:{candidate.id}")
         rubric_text = f"\nEVALUATION RUBRIC:\n{rubric}" if rubric else ""
         
         full_prompt = self.SCORING_PROMPT.format(
@@ -624,6 +651,7 @@ Respond in JSON format:
         Returns:
             Final output text.
         """
+        self.reset_context("generate_final_output")
         full_prompt = self.FINAL_OUTPUT_PROMPT.format(
             conversation_context=conversation_context or "(No conversation context provided)",
             candidate=winning_candidate.summary,
@@ -785,6 +813,7 @@ Respond in JSON format:
         Returns:
             Commentary text.
         """
+        self.reset_context(f"generate_argumentation_commentary_round_{round_num}")
         user_section = ""
         if user_feedback:
             user_section = f"""
@@ -837,6 +866,7 @@ USER FEEDBACK (incorporate this into your commentary):
         Returns:
             Dict with extracted axioms and priorities.
         """
+        self.reset_context("extract_user_axioms")
         feedback_text = "\n\n".join(
             f"Round {f.get('round', '?')}: {f.get('feedback', f)}"
             for f in feedback_history
@@ -894,6 +924,7 @@ USER FEEDBACK (incorporate this into your commentary):
         Returns:
             Compatibility analysis.
         """
+        self.reset_context("check_compatibility")
         proposals_text = "\n\n".join(
             f"=== {worker_id} ===\n{proposal.get('summary', proposal)}"
             for worker_id, proposal in proposals.items()
@@ -950,6 +981,7 @@ USER FEEDBACK (incorporate this into your commentary):
         Returns:
             Full axiom network analysis.
         """
+        self.reset_context("analyze_axiom_network")
         user_axioms_text = "\n".join(
             f"- {a.get('statement', a)}"
             for a in user_axioms

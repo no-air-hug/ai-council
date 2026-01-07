@@ -8,6 +8,32 @@ Refinement Loops (1-5) → [Optional: Diversify] → Argumentation →
 Voting (AI + You + Feedback) → Final Output → Session Log (JSONL)
 ```
 
+## Pipeline Overview
+
+```mermaid
+flowchart TD
+    U[User Prompt] --> W1[Workers: Draft Proposals]
+    W1 --> S1[Synthesizer: Questions]
+    S1 --> R{Refinement Rounds 1-5}
+    R -->|Each round| WF[Workers: Refinements]
+    WF --> RF[User Feedback Directives]
+    RF --> SQ[Synthesizer: Follow-up Questions]
+    SQ --> R
+    R --> D[Optional Diversify]
+    D --> A{Argumentation Rounds}
+    A --> WA[Workers: Arguments]
+    WA --> SC[Synthesizer: Commentary]
+    SC --> A
+    A --> CC[Synthesizer: Compatibility Check]
+    CC --> C{Collaboration Rounds}
+    C --> WC[Workers: Collaboration]
+    WC --> C
+    CC --> V[Voting: AI + User]
+    C --> V
+    V --> AX[Axiom Analysis]
+    AX --> F[Final Output]
+```
+
 ## Why This Exists
 
 **Small models + structure + debate beats big models + vibes.**
@@ -177,4 +203,3 @@ Built with:
 - [Ollama](https://ollama.com/) - Local LLM runtime
 - [Flask](https://flask.palletsprojects.com/) - Web framework
 - [Qwen](https://qwenlm.github.io/) - Default models
-

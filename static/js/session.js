@@ -449,11 +449,17 @@
                 } else if (event.collaboration) {
                     // Handle collaboration output
                     const collabSummary = event.collaboration.collaborative_summary || event.collaboration.raw_text || 'Collaborated';
-                    addChatMessage({
-                        workerId: event.worker_id,
-                        stage: 'collaboration',
-                        content: collabSummary
-                    });
+                    const messageId = pendingMessages[event.worker_id];
+                    if (messageId) {
+                        updateChatMessage(messageId, collabSummary);
+                        delete pendingMessages[event.worker_id];
+                    } else {
+                        addChatMessage({
+                            workerId: event.worker_id,
+                            stage: 'collaboration',
+                            content: collabSummary
+                        });
+                    }
                     appendLog('collaboration', event.worker_id, workerPersona, `Collaboration: ${truncate(collabSummary, 150)}`);
                 }
                 break;
@@ -541,6 +547,11 @@
                 // Explicit token update event from synthesizer or other sources
                 if (event.tokens && window.aiCouncil?.updateTokenStats) {
                     window.aiCouncil.updateTokenStats(event.tokens, event.source || 'synthesizer', event.context_limit);
+                    if ((event.source === 'synthesizer' || event.source === 'synth') && event.tokens) {
+                        const contextUsed = event.tokens.context_used || event.tokens.total_tokens || 0;
+                        const contextLimit = event.context_limit || event.tokens.context_limit || state.tokenStats.synthContextLimit;
+                        appendLog('synthesis', 'synthesizer', null, `Tokens - input ${event.tokens.input_tokens || 0}, output ${event.tokens.output_tokens || 0}, context ${contextUsed}/${contextLimit}`);
+                    }
                 }
                 break;
                 
@@ -576,6 +587,7 @@
             timeline.innerHTML = '';
         }
         currentChatStage = null;
+        Object.keys(pendingMessages).forEach(key => delete pendingMessages[key]);
         
         // Initialize roster toggle
         const rosterToggle = document.getElementById('roster-toggle');
@@ -996,6 +1008,7 @@
         const currentRoundEl = modal.querySelector('.current-round');
         const totalRoundsEl = modal.querySelector('.total-rounds');
         const outputsContainer = document.getElementById('round-worker-outputs');
+        const followUpContainer = document.getElementById('round-followup-questions');
         
         // Update title and progress
         title.textContent = `Round ${event.round} Complete`;
@@ -1004,6 +1017,55 @@
         
         // Reset feedback state
         roundWorkerFeedback = {};
+
+        const formatBulletList = (items) => {
+            if (!items || items.length === 0) return '';
+            return `<ul>${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`;
+        };
+
+        const formatQnAList = (answers) => {
+            const entries = answers ? Object.entries(answers) : [];
+            if (entries.length === 0) return '';
+            return `<ul>${entries.map(([question, answer]) => `
+                <li>
+                    <strong>${escapeHtml(question)}</strong>
+                    <div class="round-worker-answer">${escapeHtml(answer)}</div>
+                </li>
+            `).join('')}</ul>`;
+        };
+
+        if (followUpContainer) {
+            const followUp = event.follow_up_questions || {};
+            const questionsByWorker = followUp.questions_by_worker || {};
+            const overall = followUp.overall_observations || '';
+            const hasQuestions = overall || Object.keys(questionsByWorker).length > 0;
+
+            if (hasQuestions) {
+                let followUpHtml = '<h4>Follow-up questions for the next round</h4>';
+                if (overall) {
+                    followUpHtml += `<p class="round-followup-summary">${escapeHtml(overall)}</p>`;
+                }
+                if (Object.keys(questionsByWorker).length > 0) {
+                    followUpHtml += '<div class="round-followup-list">';
+                    for (const [workerId, questions] of Object.entries(questionsByWorker)) {
+                        const displayId = getWorkerDisplayId(workerId);
+                        const questionList = Array.isArray(questions) ? questions : [questions];
+                        followUpHtml += `
+                            <div class="round-followup-worker">
+                                <div class="round-followup-worker-name">${escapeHtml(displayId)}</div>
+                                ${formatBulletList(questionList.filter(Boolean))}
+                            </div>
+                        `;
+                    }
+                    followUpHtml += '</div>';
+                }
+                followUpContainer.innerHTML = followUpHtml;
+                followUpContainer.style.display = 'block';
+            } else {
+                followUpContainer.innerHTML = '';
+                followUpContainer.style.display = 'none';
+            }
+        }
         
         // Build worker output cards
         outputsContainer.innerHTML = '';
@@ -1013,12 +1075,52 @@
             
             const summary = workerData.summary || 'No output yet';
             const displayId = workerData.display_id || workerId;
+            const refinement = workerData.refinement || {};
+            const answers = refinement.answers_to_questions || {};
+            const patchNotes = refinement.patch_notes || [];
+            const newRisks = refinement.new_risks || [];
+            const newTradeoffs = refinement.new_tradeoffs || [];
+
+            const details = [];
+            if (Object.keys(answers).length > 0) {
+                details.push(`
+                    <div class="round-worker-detail">
+                        <h4>Answers to questions</h4>
+                        ${formatQnAList(answers)}
+                    </div>
+                `);
+            }
+            if (patchNotes.length > 0) {
+                details.push(`
+                    <div class="round-worker-detail">
+                        <h4>Patch notes</h4>
+                        ${formatBulletList(patchNotes)}
+                    </div>
+                `);
+            }
+            if (newRisks.length > 0) {
+                details.push(`
+                    <div class="round-worker-detail">
+                        <h4>New risks</h4>
+                        ${formatBulletList(newRisks)}
+                    </div>
+                `);
+            }
+            if (newTradeoffs.length > 0) {
+                details.push(`
+                    <div class="round-worker-detail">
+                        <h4>New tradeoffs</h4>
+                        ${formatBulletList(newTradeoffs)}
+                    </div>
+                `);
+            }
             
             card.innerHTML = `
                 <div class="round-worker-header">
                     <span class="round-worker-name">${escapeHtml(displayId)}</span>
                 </div>
                 <div class="round-worker-output">${escapeHtml(summary)}</div>
+                ${details.join('')}
                 <div class="round-worker-feedback">
                     <textarea 
                         data-worker="${workerId}"
