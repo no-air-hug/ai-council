@@ -1,0 +1,46 @@
+# AI Council - Local Multi-Agent LLM System
+# Python 3.11+ required
+# 
+# Install: pip install -r requirements.txt
+
+# =============================================================================
+# Core Dependencies (Required)
+# =============================================================================
+
+# Web Framework
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# Data Validation
+pydantic>=2.5.0
+
+# Configuration
+pyyaml>=6.0.1
+
+# System Monitoring
+psutil>=5.9.0
+
+# HTTP Client (for Ollama API)
+requests>=2.31.0
+
+# Utilities
+python-dotenv>=1.0.0
+
+# =============================================================================
+# Optional: LoRA Fine-Tuning (Phase 2)
+# =============================================================================
+# Only install these if you plan to fine-tune persona models
+# 
+# For NVIDIA GPU (CUDA):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+#   pip install unsloth transformers datasets accelerate bitsandbytes
+#
+# Or use unsloth's fast installer:
+#   pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
+
+# =============================================================================
+# Development (Optional)
+# =============================================================================
+# pytest>=7.4.0
+# black>=23.0.0
+# ruff>=0.1.0

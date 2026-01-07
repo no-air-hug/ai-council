@@ -1,0 +1,93 @@
+# AI Council - Git Ignore File
+
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# =============================================================================
+# IDE & Editors
+# =============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# =============================================================================
+# User Data (keep structure, ignore actual data)
+# =============================================================================
+# Session logs - ignore actual session files but keep .gitkeep
+data/sessions/*.jsonl
+data/sessions/*.json
+data/sessions/*.txt
+session-log-*.txt
+!data/sessions/.gitkeep
+
+# Personas - ignore user-created personas but keep structure
+data/personas/personas.json
+data/personas/raw_imports/*
+!data/personas/raw_imports/.gitkeep
+
+# Exports - ignore exported data but keep structure
+data/exports/*
+!data/exports/.gitkeep
+
+# Axioms - ignore axiom data but keep structure
+data/axioms/*.json
+!data/axioms/.gitkeep
+
+# User conversation imports
+conversations.json
+
+# =============================================================================
+# Environment & Config
+# =============================================================================
+.env
+.env.local
+.env.*.local
+*.log
+
+# =============================================================================
+# OS Files
+# =============================================================================
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# =============================================================================
+# Temporary Files
+# =============================================================================
+*.tmp
+*.temp
+*.bak
+*.backup
+

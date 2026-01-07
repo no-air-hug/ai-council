@@ -1,0 +1,42 @@
+# AI Council - 32GB RAM Mode Configuration
+# Full capacity mode for 32GB RAM systems
+
+mode_name: "32GB"
+description: "Full capacity mode for 32GB RAM systems"
+
+# Worker Configuration
+workers:
+  count: 3  # Can go up to 4
+  model: "qwen2.5:7b"  # 3-4B model, 4-bit quantized
+  context_window: 16384  # 16K tokens
+  max_output_tokens: 1500  # Increased to prevent JSON truncation
+
+# Synthesizer Configuration
+synthesizer:
+  model: "qwen2.5:7b"  # 7-8B model, 4-bit quantized
+  context_window: 32768  # 32K tokens
+  max_output_tokens: 4000
+
+# Token Limits
+token_limits:
+  worker_draft: 1500
+  synth_questions: 4000
+  refinement: 1500
+  candidate_synthesis: 2000
+  argumentation: 1500
+
+# Memory Management
+memory:
+  system_reserved_gb: 4
+  model_unloading: "moderate"  # Can keep worker model during worker stage
+  max_ram_usage_percent: 80
+
+# Pipeline Settings
+pipeline:
+  refinement_loops: 2
+  argumentation_rounds: 2  # Number of argument/counter-argument rounds
+  collaboration_rounds: 2  # Number of collaboration rounds when proposals are compatible
+  axiom_rounds: 1  # Number of axiom analysis rounds (LAST stage)
+  require_structured_output: true
+
+

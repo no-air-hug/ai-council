@@ -1,0 +1,42 @@
+# AI Council - 16GB RAM Mode Configuration
+# Optimized for systems with 16GB RAM
+
+mode_name: "16GB"
+description: "Conservative mode for 16GB RAM systems"
+
+# Worker Configuration
+workers:
+  count: 2  # Can go up to 3 if needed
+  model: "qwen2.5:7b"  # 7B model, 4-bit quantized
+  context_window: 8192  # 8K tokens
+  max_output_tokens: 1500  # Increased to prevent JSON truncation
+
+# Synthesizer Configuration
+synthesizer:
+  model: "qwen2.5:7b"  # 7B model, 4-bit quantized (loads when workers done)
+  context_window: 20480  # 20K tokens
+  max_output_tokens: 4000
+
+# Token Limits
+token_limits:
+  worker_draft: 1500
+  synth_questions: 4000
+  refinement: 1500
+  candidate_synthesis: 2000
+  argumentation: 1500
+
+# Memory Management
+memory:
+  system_reserved_gb: 2
+  model_unloading: "aggressive"  # Unload between stages
+  max_ram_usage_percent: 85
+
+# Pipeline Settings
+pipeline:
+  refinement_loops: 3
+  argumentation_rounds: 2  # Number of argument/counter-argument rounds
+  collaboration_rounds: 3  # Number of collaboration rounds when proposals are compatible
+  axiom_rounds: 1  # Number of axiom analysis rounds (LAST stage)
+  require_structured_output: true
+
+

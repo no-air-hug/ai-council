@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Council</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="mode-selector">
+                    <button id="mode-16gb" class="mode-btn active">16GB</button>
+                    <button id="mode-32gb" class="mode-btn">32GB</button>
+                </div>
+                <h1 class="title" id="btn-home" title="Back to Council">AI Council</h1>
+            </div>
+            <div class="header-right">
+                <div class="memory-status" id="memory-status">
+                    <span class="memory-label">RAM:</span>
+                    <span class="memory-value" id="ram-usage">--</span>
+                </div>
+                <button class="nav-btn" id="btn-council" title="Council Session">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    </svg>
+                </button>
+                <button class="nav-btn" id="btn-personas" title="Manage Personas">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                </button>
+                <button class="nav-btn" id="btn-settings" title="Settings">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Session View (Default) -->
+            <section id="view-session" class="view active">
+                <!-- Prompt Input -->
+                <div class="prompt-section">
+                    <div class="prompt-container">
+                        <textarea 
+                            id="prompt-input" 
+                            placeholder="Enter your prompt here... What would you like the council to deliberate on?"
+                            rows="3"
+                        ></textarea>
+                        <!-- Configuration moved to Settings - hidden inputs for state sync -->
+                        <input type="hidden" id="debate-rounds" value="2">
+                        <input type="hidden" id="argument-rounds" value="1">
+                        <div class="prompt-actions">
+                            <button id="btn-start" class="btn-primary">
+                                <span>Start Council</span>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="5 3 19 12 5 21 5 3"/>
+                                </svg>
+                            </button>
+                            <button id="btn-diversify" class="btn-secondary" disabled title="Let workers see each other's responses and diversify">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <path d="M8 12h8"/>
+                                    <path d="M12 8v8"/>
+                                </svg>
+                                <span>Diversify</span>
+                            </button>
+                            <button id="btn-end-council" class="btn-danger" style="display: none;" title="End current council session">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                    <line x1="9" y1="9" x2="15" y2="15"/>
+                                    <line x1="15" y1="9" x2="9" y2="15"/>
+                                </svg>
+                                <span>End Council</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Active Session Banner -->
+                <div class="session-banner" id="session-banner" style="display: none;">
+                    <div class="session-banner-content">
+                        <span class="session-banner-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                        </span>
+                        <span class="session-banner-text">Session active: <code id="session-id-display">--</code></span>
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="progress-section" id="progress-section" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <div class="progress-text" id="progress-text">Initializing...</div>
+                </div>
+
+                <!-- Council Chat Timeline -->
+                <div class="council-chat" id="council-chat">
+                    <!-- Stage Headers & Messages will be added dynamically -->
+                    <div class="chat-timeline" id="chat-timeline">
+                        <!-- Chat messages appear here -->
+                    </div>
+                </div>
+
+                <!-- Worker Roster (collapsed sidebar) -->
+                <div class="worker-roster" id="worker-roster">
+                    <div class="roster-header">
+                        <span>Council Members</span>
+                        <button class="roster-toggle" id="roster-toggle" title="Toggle roster">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="15 18 9 12 15 6"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="roster-members" id="roster-members">
+                        <!-- Worker cards appear here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Voting View -->
+            <section id="view-voting" class="view">
+                <div class="voting-header">
+                    <h2>Voting Phase</h2>
+                    <p class="voting-instructions">Review each candidate's argument and output, then cast your vote and provide feedback.</p>
+                </div>
+
+                <!-- Conversation History (collapsible) -->
+                <div class="conversation-history-section">
+                    <div class="conversation-header" id="conversation-toggle">
+                        <h3>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                            </svg>
+                            Council Discussion History
+                        </h3>
+                        <button class="conversation-expand-btn" title="Toggle conversation view">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="chevron-down">
+                                <polyline points="6 9 12 15 18 9"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="conversation-content collapsed" id="conversation-content">
+                        <div class="conversation-timeline" id="voting-conversation">
+                            <!-- Conversation messages will be populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Prompt Feedback Section -->
+                <div class="voting-section prompt-feedback-section">
+                    <h3>Prompt Quality Feedback</h3>
+                    <p class="section-description">Rate and provide feedback on the original prompt (useful for future fine-tuning).</p>
+                    <div class="prompt-display" id="prompt-display">
+                        <!-- Original prompt will be shown here -->
+                    </div>
+                    <div class="prompt-rating">
+                        <label>Prompt Quality Rating:</label>
+                        <div class="rating-buttons" id="prompt-rating-buttons">
+                            <button class="rating-btn" data-rating="1" title="Poor">1</button>
+                            <button class="rating-btn" data-rating="2" title="Below Average">2</button>
+                            <button class="rating-btn" data-rating="3" title="Average">3</button>
+                            <button class="rating-btn" data-rating="4" title="Good">4</button>
+                            <button class="rating-btn" data-rating="5" title="Excellent">5</button>
+                            <button class="rating-btn skip" data-rating="0" title="Skip rating">Skip</button>
+                        </div>
+                    </div>
+                    <textarea 
+                        id="prompt-feedback" 
+                        placeholder="What could be improved about this prompt? (optional)..."
+                        rows="2"
+                        class="feedback-textarea"
+                    ></textarea>
+                </div>
+
+                <!-- Overall Session Feedback -->
+                <div class="voting-section overall-feedback-section">
+                    <h3>Overall Session Feedback</h3>
+                    <textarea 
+                        id="overall-feedback" 
+                        placeholder="General feedback on this council session (optional)..."
+                        rows="2"
+                        class="feedback-textarea"
+                    ></textarea>
+                </div>
+
+                <!-- Candidates Container -->
+                <div class="candidates-container" id="candidates-container">
+                    <!-- Candidates will be added dynamically -->
+                </div>
+
+                <!-- Worker Feedback Section -->
+                <div class="voting-section worker-feedback-section">
+                    <h3>Worker Feedback</h3>
+                    <p class="section-description">Provide feedback on individual workers to help improve their personas.</p>
+                    <div class="worker-feedback-grid" id="worker-feedback-grid">
+                        <!-- Worker feedback cards will be added dynamically -->
+                    </div>
+                </div>
+
+                <!-- Synthesizer Feedback Section -->
+                <div class="voting-section synthesizer-feedback-section">
+                    <h3>Synthesizer Feedback</h3>
+                    <p class="section-description">How well did the synthesizer coordinate and combine worker outputs?</p>
+                    <textarea 
+                        id="synthesizer-feedback" 
+                        placeholder="Feedback on the synthesizer's performance (optional)..."
+                        rows="2"
+                        class="feedback-textarea"
+                    ></textarea>
+                </div>
+
+                <div class="voting-actions">
+                    <button id="btn-back-to-session" class="btn-secondary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="15 18 9 12 15 6"/>
+                        </svg>
+                        Back to Session
+                    </button>
+                    <button id="btn-submit-votes" class="btn-primary" disabled>
+                        Submit Votes
+                    </button>
+                </div>
+            </section>
+
+            <!-- Persona Manager View -->
+            <section id="view-personas" class="view">
+                <div class="personas-header">
+                    <h2>Persona Manager</h2>
+                    <div class="personas-actions">
+                        <button id="btn-new-persona" class="btn-secondary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                            New Persona
+                        </button>
+                        <button id="btn-import-text" class="btn-secondary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            Import Text
+                        </button>
+                    </div>
+                </div>
+
+                <div class="personas-grid" id="personas-grid">
+                    <!-- Personas will be added dynamically -->
+                </div>
+
+                <!-- Persona Editor Modal -->
+                <div class="modal" id="persona-modal" style="display: none;">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3 id="persona-modal-title">Edit Persona</h3>
+                            <button class="modal-close" id="btn-close-persona-modal">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="form-group">
+                                <label for="persona-name">Name</label>
+                                <input type="text" id="persona-name" placeholder="Persona name">
+                            </div>
+                            <div class="form-group">
+                                <label for="persona-prompt">System Prompt</label>
+                                <textarea id="persona-prompt" rows="6" placeholder="Enter the system prompt..."></textarea>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="persona-style">Reasoning Style</label>
+                                    <select id="persona-style">
+                                        <option value="structured">Structured</option>
+                                        <option value="lateral">Lateral</option>
+                                        <option value="critical">Critical</option>
+                                        <option value="intuitive">Intuitive</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="persona-tone">Tone</label>
+                                    <select id="persona-tone">
+                                        <option value="formal">Formal</option>
+                                        <option value="casual">Casual</option>
+                                        <option value="technical">Technical</option>
+                                        <option value="conversational">Conversational</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn-secondary" id="btn-cancel-persona">Cancel</button>
+                            <button class="btn-primary" id="btn-save-persona">Save</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings View -->
+            <section id="view-settings" class="view">
+                <div class="settings-header">
+                    <h2>Settings</h2>
+                </div>
+                <div class="settings-content">
+                    <div class="settings-group">
+                        <h3>RAM Mode</h3>
+                        <p class="settings-description">Select based on your system's available RAM.</p>
+                        <div class="setting-item">
+                            <label>
+                                <input type="radio" name="ram-mode" value="16GB" checked>
+                                <span>16GB Mode</span>
+                                <small>2-3 workers, smaller models</small>
+                            </label>
+                            <label>
+                                <input type="radio" name="ram-mode" value="32GB">
+                                <span>32GB Mode</span>
+                                <small>3-4 workers, larger models</small>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-group">
+                        <h3>Pipeline Configuration</h3>
+                        <p class="settings-description">Configure the council deliberation process.</p>
+                        
+                        <div class="settings-row">
+                            <label for="setting-refinement-rounds">Refinement Rounds</label>
+                            <input type="number" id="setting-refinement-rounds" min="1" max="5" value="3">
+                            <small>How many times workers refine their proposals</small>
+                        </div>
+                        
+                        <div class="settings-row">
+                            <label for="setting-argument-rounds">Argumentation Rounds</label>
+                            <input type="number" id="setting-argument-rounds" min="1" max="5" value="1">
+                            <small>Debate rounds where workers argue for their positions</small>
+                        </div>
+                        
+                        <div class="settings-row">
+                            <label for="setting-collaboration-rounds">Collaboration Rounds</label>
+                            <input type="number" id="setting-collaboration-rounds" min="0" max="3" value="1">
+                            <small>Joint refinement if proposals are compatible (0 = disabled)</small>
+                        </div>
+                        
+                        <div class="settings-row">
+                            <label for="setting-axiom-rounds">Axiom Analysis Rounds</label>
+                            <input type="number" id="setting-axiom-rounds" min="0" max="2" value="1">
+                            <small>Extract underlying axioms after voting (0 = disabled)</small>
+                        </div>
+                        
+                        <div class="settings-row">
+                            <label for="setting-temperature">Response Temperature</label>
+                            <input type="range" id="setting-temperature" min="0" max="1" step="0.1" value="0.7">
+                            <span class="token-value" id="temperature-value">0.7</span>
+                            <small>Higher = more creative, Lower = more focused</small>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-group">
+                        <h3>Worker Configuration</h3>
+                        <p class="settings-description">Configure worker behavior and resources. UI settings override config files.</p>
+                        
+                        <div class="settings-row">
+                            <label for="setting-worker-count">Number of Workers</label>
+                            <input type="number" id="setting-worker-count" min="2" max="4" value="2">
+                            <button class="btn-add-worker" id="btn-add-worker" title="Add a worker">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19"/>
+                                    <line x1="5" y1="12" x2="19" y2="12"/>
+                                </svg>
+                                Add Worker
+                            </button>
+                        </div>
+                        
+                        <div class="worker-personas-config">
+                            <label>Worker Personas</label>
+                            <div class="persona-selector-grid" id="worker-persona-selectors">
+                                <div class="persona-selector">
+                                    <span class="worker-label">Worker 1:</span>
+                                    <select id="setting-worker-1-persona" class="persona-dropdown">
+                                        <option value="analyst">Analyst (structured)</option>
+                                        <option value="creative">Creative (lateral)</option>
+                                        <option value="skeptic">Skeptic (critical)</option>
+                                        <option value="custom">-- Custom Personas --</option>
+                                    </select>
+                                </div>
+                                <div class="persona-selector">
+                                    <span class="worker-label">Worker 2:</span>
+                                    <select id="setting-worker-2-persona" class="persona-dropdown">
+                                        <option value="creative" selected>Creative (lateral)</option>
+                                        <option value="analyst">Analyst (structured)</option>
+                                        <option value="skeptic">Skeptic (critical)</option>
+                                        <option value="custom">-- Custom Personas --</option>
+                                    </select>
+                                </div>
+                                <div class="persona-selector" id="worker-3-persona-row" style="display: none;">
+                                    <span class="worker-label">Worker 3:</span>
+                                    <select id="setting-worker-3-persona" class="persona-dropdown">
+                                        <option value="skeptic">Skeptic (critical)</option>
+                                        <option value="analyst">Analyst (structured)</option>
+                                        <option value="creative">Creative (lateral)</option>
+                                        <option value="custom">-- Custom Personas --</option>
+                                    </select>
+                                </div>
+                                <div class="persona-selector" id="worker-4-persona-row" style="display: none;">
+                                    <span class="worker-label">Worker 4:</span>
+                                    <select id="setting-worker-4-persona" class="persona-dropdown">
+                                        <option value="analyst">Analyst (structured)</option>
+                                        <option value="creative">Creative (lateral)</option>
+                                        <option value="skeptic">Skeptic (critical)</option>
+                                        <option value="custom">-- Custom Personas --</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <small>Assign personas to each worker slot. Custom personas will appear if imported.</small>
+                        </div>
+                        
+                        <div class="settings-row">
+                            <label for="setting-worker-context">Worker Context Window</label>
+                            <input type="range" id="setting-worker-context" min="1024" max="32768" step="1024" value="8192">
+                            <span class="token-value" id="worker-context-value">8,192</span>
+                            <small>Maximum context size for workers (1K - 32K)</small>
+                        </div>
+                        
+                        <div class="settings-row">
+                            <label for="setting-worker-tokens">Worker Max Output</label>
+                            <input type="range" id="setting-worker-tokens" min="200" max="10000" step="50" value="1500">
+                            <span class="token-value" id="worker-tokens-value">1500</span>
+                            <small>Maximum output tokens per worker response</small>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-group">
+                        <h3>Synthesizer Configuration</h3>
+                        <p class="settings-description">Configure synthesizer behavior and resources.</p>
+                        
+                        <div class="settings-row">
+                            <label for="setting-synth-context">Synthesizer Context Window</label>
+                            <input type="range" id="setting-synth-context" min="1024" max="32768" step="1024" value="20480">
+                            <span class="token-value" id="synth-context-value">20,480</span>
+                            <small>Maximum context size for synthesizer (1K - 32K)</small>
+                        </div>
+                        
+                        <div class="settings-row">
+                            <label for="setting-synth-tokens">Synthesizer Max Output</label>
+                            <input type="range" id="setting-synth-tokens" min="200" max="12000" step="50" value="4000">
+                            <span class="token-value" id="synth-tokens-value">4000</span>
+                            <small>Maximum output tokens for synthesizer</small>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-group">
+                        <h3>Token Usage & Context Monitoring</h3>
+                        <p class="settings-description">Live monitoring of LLM resource usage.</p>
+                        
+                        <div class="context-monitors">
+                            <div class="context-monitor">
+                                <div class="monitor-header">
+                                    <span class="monitor-label">Worker Context</span>
+                                    <span class="monitor-value"><span id="worker-context-used">0</span> / <span id="worker-context-limit">2,048</span></span>
+                                </div>
+                                <div class="usage-bar-container">
+                                    <div class="usage-bar worker-bar" id="worker-context-bar" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="context-monitor">
+                                <div class="monitor-header">
+                                    <span class="monitor-label">Synthesizer Context</span>
+                                    <span class="monitor-value"><span id="synth-context-used">0</span> / <span id="synth-context-limit">4,096</span></span>
+                                </div>
+                                <div class="usage-bar-container">
+                                    <div class="usage-bar synth-bar" id="synth-context-bar" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="token-stats-grid">
+                            <div class="token-stat">
+                                <span class="stat-label">Session Total</span>
+                                <span class="stat-value" id="tokens-total">0</span>
+                            </div>
+                            <div class="token-stat">
+                                <span class="stat-label">Input Tokens</span>
+                                <span class="stat-value" id="tokens-input">0</span>
+                            </div>
+                            <div class="token-stat">
+                                <span class="stat-label">Output Tokens</span>
+                                <span class="stat-value" id="tokens-output">0</span>
+                            </div>
+                            <div class="token-stat">
+                                <span class="stat-label">Avg per Call</span>
+                                <span class="stat-value" id="tokens-avg">0</span>
+                            </div>
+                        </div>
+                        
+                        <button class="btn-secondary btn-small" id="btn-reset-token-stats">Reset Stats</button>
+                    </div>
+
+                    <div class="settings-group">
+                        <h3>System Status</h3>
+                        <div class="status-grid" id="status-grid">
+                            <div class="status-item">
+                                <span class="status-label">Ollama</span>
+                                <span class="status-value" id="status-ollama">Checking...</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="status-label">Mode</span>
+                                <span class="status-value" id="status-mode">--</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="status-label">Workers</span>
+                                <span class="status-value" id="status-workers">--</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-group">
+                        <h3>Export Data</h3>
+                        <button class="btn-secondary" id="btn-export-logs">
+                            Export Session Logs
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Final Output View -->
+            <section id="view-final" class="view">
+                <div class="final-header">
+                    <h2>Final Output</h2>
+                    <button class="btn-secondary" id="btn-new-session">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        New Session
+                    </button>
+                </div>
+                <div class="final-content" id="final-content">
+                    <!-- Final output will be displayed here -->
+                </div>
+                
+                <!-- Axiom Analysis Section -->
+                <div class="axiom-analysis-section" id="axiom-section" style="display: none;">
+                    <h3>Axiom Analysis</h3>
+                    <p class="section-intro">The underlying axioms and assumptions derived from this discussion:</p>
+                    <div class="axiom-network" id="axiom-network">
+                        <!-- Axioms will be displayed here -->
+                    </div>
+                    <div class="shared-axioms" id="shared-axioms">
+                        <h4>Shared Axioms</h4>
+                        <!-- Shared axioms between workers -->
+                    </div>
+                    <div class="axiom-conflicts" id="axiom-conflicts">
+                        <h4>Axiom Conflicts</h4>
+                        <!-- Conflicting axioms -->
+                    </div>
+                    <div class="derived-theories" id="derived-theories">
+                        <h4>Derived Theories</h4>
+                        <!-- Theories built from axioms -->
+                    </div>
+                </div>
+                
+                <div class="final-meta" id="final-meta">
+                    <!-- Voting results and metadata -->
+                </div>
+                
+                <!-- Final Feedback Form -->
+                <div class="final-feedback-section" id="final-feedback-section" style="display: none;">
+                    <h4>Final Feedback (for logging)</h4>
+                    <textarea id="final-feedback-input" placeholder="Any final thoughts on the council's output? (optional)" rows="3"></textarea>
+                    <button class="btn-primary" id="btn-submit-final-feedback">Submit Final Feedback</button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Floating Session Log Panel (visible across all views) -->
+        <div class="floating-log collapsed" id="floating-log">
+            <div class="floating-log-header" id="floating-log-toggle">
+                <div class="floating-log-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                        <polyline points="10 9 9 9 8 9"/>
+                    </svg>
+                    <span>Session Log</span>
+                    <span class="log-entry-count" id="log-entry-count">(0)</span>
+                </div>
+                <div class="floating-log-controls">
+                    <button class="btn-small" id="btn-clear-log" title="Clear log">Clear</button>
+                    <button class="btn-small" id="btn-export-log" title="Export log">Export</button>
+                    <button class="log-toggle-btn" title="Toggle log panel">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="chevron-icon">
+                            <polyline points="6 15 12 9 18 15"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="floating-log-content" id="session-log-content">
+                <div class="log-entries" id="log-entries">
+                    <!-- Log entries will be added dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Round Feedback Modal -->
+        <div class="modal" id="round-feedback-modal" style="display: none;">
+            <div class="modal-content modal-wide">
+                <div class="modal-header">
+                    <h3 id="round-feedback-title">Round 1 Complete</h3>
+                    <div class="round-progress" id="round-progress-indicator">
+                        <span class="current-round">1</span>/<span class="total-rounds">2</span>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <p class="round-feedback-intro">
+                        <strong>Your feedback will be incorporated into the next round.</strong>
+                        Workers and the synthesizer will directly address your guidance.
+                    </p>
+                    
+                    <div class="round-worker-outputs" id="round-worker-outputs">
+                        <!-- Worker output cards with feedback will be added dynamically -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-danger" id="btn-skip-to-synthesis" title="Skip remaining rounds and proceed to synthesis">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="5 4 15 12 5 20 5 4"/>
+                            <line x1="19" y1="5" x2="19" y2="19"/>
+                        </svg>
+                        Skip to Synthesis
+                    </button>
+                    <button class="btn-primary" id="btn-continue-round">
+                        Continue to Next Round
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="9 18 15 12 9 6"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Argument Feedback Modal -->
+        <!-- Collaboration Feedback Modal -->
+        <div class="modal" id="collab-feedback-modal" style="display: none;">
+            <div class="modal-content modal-wide">
+                <div class="modal-header">
+                    <h3 id="collab-feedback-title">Collaboration Round 1</h3>
+                    <div class="round-progress" id="collab-progress-indicator">
+                        <span class="current-round">1</span>/<span class="total-rounds">2</span>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <p class="round-feedback-intro">
+                        <strong>Workers are collaborating on compatible ideas.</strong>
+                        Guide the collaboration direction to help them build on each other's insights.
+                    </p>
+                    
+                    <div class="round-worker-outputs" id="collab-worker-outputs">
+                        <!-- Worker collaboration outputs will be added dynamically -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-danger" id="btn-skip-collab" title="Skip remaining collaboration and proceed to synthesis">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="5 4 15 12 5 20 5 4"/>
+                            <line x1="19" y1="5" x2="19" y2="19"/>
+                        </svg>
+                        Skip to Synthesis
+                    </button>
+                    <button class="btn-primary" id="btn-continue-collab">
+                        Continue Collaboration
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="9 18 15 12 9 6"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="modal" id="argument-feedback-modal" style="display: none;">
+            <div class="modal-content modal-wide">
+                <div class="modal-header">
+                    <h3 id="argument-feedback-title">Argumentation Round 1</h3>
+                    <div class="round-progress" id="argument-progress-indicator">
+                        <span class="current-round">1</span>/<span class="total-rounds">2</span>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <p class="round-feedback-intro">
+                        <strong>Your feedback will shape the next argumentation round.</strong>
+                        Workers will address your points and the synthesizer will incorporate your guidance.
+                    </p>
+                    
+                    <div class="round-worker-outputs" id="argument-worker-outputs">
+                        <!-- Worker argument cards with feedback will be added dynamically -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-danger" id="btn-skip-to-voting" title="Skip remaining argument rounds and proceed to voting">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="5 4 15 12 5 20 5 4"/>
+                            <line x1="19" y1="5" x2="19" y2="19"/>
+                        </svg>
+                        Skip to Voting
+                    </button>
+                    <button class="btn-primary" id="btn-continue-argument">
+                        Continue Argumentation
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="9 18 15 12 9 6"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Swap Persona Modal -->
+        <div class="modal" id="swap-modal" style="display: none;">
+            <div class="modal-content modal-small">
+                <div class="modal-header">
+                    <h3>Swap Persona</h3>
+                    <button class="modal-close" id="btn-close-swap-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="swap-persona-select">Select New Persona</label>
+                        <select id="swap-persona-select">
+                            <!-- Personas will be added dynamically -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>What to do with previous output?</label>
+                        <div class="radio-group">
+                            <label>
+                                <input type="radio" name="swap-action" value="restart" checked>
+                                <span>Restart from scratch</span>
+                            </label>
+                            <label>
+                                <input type="radio" name="swap-action" value="keep_all">
+                                <span>Keep all outputs</span>
+                            </label>
+                            <label>
+                                <input type="radio" name="swap-action" value="archive">
+                                <span>Archive old outputs</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" id="btn-cancel-swap">Cancel</button>
+                    <button class="btn-primary" id="btn-confirm-swap">Swap</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/session.js"></script>
+    <script src="/static/js/voting.js"></script>
+    <script src="/static/js/personas.js"></script>
+</body>
+</html>
+
+
