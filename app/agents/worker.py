@@ -52,13 +52,35 @@ class WorkerDraft:
 @dataclass
 class WorkerRefinement:
     """Structured output from a worker refinement."""
-    updated_summary: str
-    changes_made: list
     answers_to_questions: Dict[str, str]
+    patch_notes: list
+    new_risks: list
+    new_tradeoffs: list
     raw_text: str = ""
     
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+    @classmethod
+    def from_json(cls, text: str) -> "WorkerRefinement":
+        """Parse structured JSON output from refinement."""
+        try:
+            data = json.loads(text)
+            return cls(
+                answers_to_questions=data.get("answers_to_questions", {}),
+                patch_notes=data.get("patch_notes", []),
+                new_risks=data.get("new_risks", []),
+                new_tradeoffs=data.get("new_tradeoffs", []),
+                raw_text=text
+            )
+        except (json.JSONDecodeError, KeyError, ValueError):
+            return cls(
+                answers_to_questions={},
+                patch_notes=[],
+                new_risks=[],
+                new_tradeoffs=[],
+                raw_text=text
+            )
 
 
 @dataclass
@@ -100,7 +122,7 @@ Provide your response in the following JSON format:
 
 Be concise and structured. Focus on your unique perspective."""
 
-    REFINEMENT_PROMPT = """Review your previous work and build upon it to answer the synthesizer's questions.
+    REFINEMENT_PROMPT = """Review your previous work and answer the synthesizer's questions with ONLY deltas.
 
 {conversation_history}
 
@@ -112,16 +134,15 @@ NEW QUESTIONS TO ADDRESS:
 {user_guidance}
 Build on your previous thinking. Evolve your proposal - don't start from scratch. Reference insights from earlier rounds.
 
-Respond in JSON format:
+Respond in JSON format (delta-only):
 {{
-    "updated_summary": "Your evolved proposal (build on previous work)",
-    "changes_made": ["change 1 (referencing what prompted it)", "change 2", ...],
-    "answers_to_questions": {{"question": "detailed answer building on previous insights", ...}},
-    "user_feedback_addressed": "How you addressed user feedback (if any)",
-    "key_insights_retained": ["insight from round N that still applies", ...]
+    "answers_to_questions": {{"question": "direct answer building on previous insights", ...}},
+    "patch_notes": ["Concrete change 1 and why", "Concrete change 2 and why"],
+    "new_risks": ["New risk introduced by changes (if any)"],
+    "new_tradeoffs": ["New tradeoff introduced by changes (if any)"]
 }}
 
-Be specific about what changed and why. Show continuity of thought across rounds."""
+Do NOT rewrite the full proposal. Be specific about what changed and why. Show continuity of thought across rounds."""
 
     ARGUMENT_PROMPT = """Make your case for why your proposal is the best solution.
 
@@ -427,8 +448,8 @@ Be specific and concrete. Show real collaboration, not just agreement."""
         # Add each refinement round
         for i, ref in enumerate(self.refinements, start=2):
             history_parts.append(f"\n=== ROUND {i} ===")
-            if ref.changes_made:
-                history_parts.append(f"Changes made: {'; '.join(ref.changes_made[:3])}")
+            if ref.patch_notes:
+                history_parts.append(f"Patch notes: {'; '.join(ref.patch_notes[:3])}")
             if ref.answers_to_questions:
                 answers = list(ref.answers_to_questions.items())[:2]
                 for q, a in answers:
@@ -484,11 +505,10 @@ Build on your previous proposal above. Address these questions and evolve your p
 
 Respond in JSON:
 {{
-    "updated_summary": "Your evolved proposal (max 200 words, building on the current proposal above)",
-    "changes_made": ["change 1 (referencing what prompted it)", "change 2", ...],
-    "answers_to_questions": {{"question": "detailed answer building on previous insights", ...}},
-    "user_feedback_addressed": "How you addressed user feedback (if any)",
-    "key_insights_retained": ["insight from your original proposal that still applies", ...]
+    "answers_to_questions": {{"question": "direct answer building on previous insights", ...}},
+    "patch_notes": ["Concrete change 1 and why", "Concrete change 2 and why"],
+    "new_risks": ["New risk introduced by changes (if any)"],
+    "new_tradeoffs": ["New tradeoff introduced by changes (if any)"]
 }}"""
         
         # Add questions to context (this maintains conversation history)
@@ -507,27 +527,9 @@ Respond in JSON:
         # Add response to context for next round
         self._add_to_context("assistant", result.text)
         
-        try:
-            data = json.loads(result.text)
-            refinement = WorkerRefinement(
-                updated_summary=data.get("updated_summary", ""),
-                changes_made=data.get("changes_made", []),
-                answers_to_questions=data.get("answers_to_questions", {}),
-                raw_text=result.text
-            )
-        except (json.JSONDecodeError, KeyError):
-            refinement = WorkerRefinement(
-                updated_summary=result.text,
-                changes_made=[],
-                answers_to_questions={},
-                raw_text=result.text
-            )
+        refinement = WorkerRefinement.from_json(result.text)
         
         self.refinements.append(refinement)
-        
-        # Update current draft summary
-        if refinement.updated_summary:
-            self.current_draft.summary = refinement.updated_summary
         
         self._history.append({
             "stage": "refinement",
@@ -786,9 +788,6 @@ Respond in JSON:
         
         try:
             data = json.loads(result.text)
-            # Update current draft with collaborative output
-            if data.get("collaborative_summary"):
-                self.current_draft.summary = data["collaborative_summary"]
         except json.JSONDecodeError:
             data = {
                 "collaborative_summary": result.text,
@@ -956,5 +955,3 @@ Respond in JSON:
             "refinements": [r.to_dict() for r in self.refinements],
             "argument": self.argument.to_dict() if self.argument else None
         }
-
-

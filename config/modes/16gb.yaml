@@ -38,5 +38,5 @@ pipeline:
   collaboration_rounds: 3  # Number of collaboration rounds when proposals are compatible
   axiom_rounds: 1  # Number of axiom analysis rounds (LAST stage)
   require_structured_output: true
-
+  refinement_similarity_threshold: 0.92
 

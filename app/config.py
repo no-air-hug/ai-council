@@ -61,6 +61,7 @@ class PipelineConfig:
     collaboration_rounds: int = 1  # Number of collaboration rounds when compatible
     axiom_rounds: int = 1  # Number of axiom analysis rounds (LAST stage)
     require_structured_output: bool = True
+    refinement_similarity_threshold: float = 0.92
 
 
 @dataclass
@@ -245,5 +246,4 @@ def get_config_manager(base_path: Optional[Path] = None) -> ConfigManager:
 def get_config() -> AppConfig:
     """Get the current application configuration."""
     return get_config_manager().config
-
 
