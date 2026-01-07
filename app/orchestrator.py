@@ -414,7 +414,11 @@ class Orchestrator:
                 # Generate follow-up questions from synthesizer for next round
                 yield {"type": "synth_commentary", "content": "Analyzing refinements for follow-up questions..."}
                 
-                follow_up_questions = self.synthesizer.generate_follow_up_questions(refinements, questions)
+                follow_up_questions = self.synthesizer.generate_follow_up_questions(
+                    refinements,
+                    questions,
+                    user_feedback=None
+                )
                 
                 # Emit synthesizer token usage
                 synth_tokens = self.synthesizer.get_last_token_usage()
@@ -427,6 +431,8 @@ class Orchestrator:
                 
                 if follow_up_questions:
                     questions = follow_up_questions  # Update questions for next round
+                    self._stage_outputs["questions"] = follow_up_questions.to_dict()
+                    self._stage_outputs["follow_up_questions"] = follow_up_questions.to_dict()
                     yield {"type": "synth_commentary", "content": follow_up_questions.overall_observations or "Follow-up questions generated."}
                 
                 yield {
@@ -960,6 +966,30 @@ class Orchestrator:
                         self.questions_by_worker = data.get("questions_by_worker", {})
                         self.overall_observations = data.get("overall_observations", "")
                 questions = QuestionsHolder(q_data)
+
+            # If user provided feedback, regenerate follow-up questions with that guidance
+            prev_round_feedback = self._round_feedback.get(current_round, {})
+            feedback_payload = prev_round_feedback.get("worker_feedback", {}) if prev_round_feedback else {}
+            previous_refinements = self._stage_outputs.get(f"refinements_{current_round}", {})
+            if feedback_payload and previous_refinements:
+                yield {"type": "synth_commentary", "content": "Incorporating user feedback into follow-up questions..."}
+                follow_up_questions = self.synthesizer.generate_follow_up_questions(
+                    previous_refinements,
+                    questions,
+                    user_feedback=feedback_payload
+                )
+                synth_tokens = self.synthesizer.get_last_token_usage()
+                yield {
+                    "type": "tokens_update",
+                    "source": "synthesizer",
+                    "tokens": synth_tokens,
+                    "context_limit": self.synth_context_window
+                }
+                if follow_up_questions:
+                    questions = follow_up_questions
+                    self._stage_outputs["questions"] = follow_up_questions.to_dict()
+                    self._stage_outputs["follow_up_questions"] = follow_up_questions.to_dict()
+                    yield {"type": "synth_commentary", "content": follow_up_questions.overall_observations or "Follow-up questions generated."}
             
             for loop in range(current_round, total_rounds):
                 self._current_round = loop + 1
@@ -1043,9 +1073,15 @@ class Orchestrator:
                     # Generate follow-up questions from synthesizer for next round
                     yield {"type": "synth_commentary", "content": "Analyzing refinements for follow-up questions..."}
                     
-                    follow_up_questions = self.synthesizer.generate_follow_up_questions(refinements, questions)
+                    follow_up_questions = self.synthesizer.generate_follow_up_questions(
+                        refinements,
+                        questions,
+                        user_feedback=None
+                    )
                     if follow_up_questions:
                         questions = follow_up_questions  # Update questions for next round
+                        self._stage_outputs["questions"] = follow_up_questions.to_dict()
+                        self._stage_outputs["follow_up_questions"] = follow_up_questions.to_dict()
                         yield {"type": "synth_commentary", "content": follow_up_questions.overall_observations or "Follow-up questions generated."}
                     
                     yield {
@@ -1898,7 +1934,7 @@ class Orchestrator:
             summary_parts.append("\nARGUMENTATION HIGHLIGHTS:")
             for wid, arg_data in args.items():
                 if isinstance(arg_data, dict) and "main_argument" in arg_data:
-                    summary_parts.append(f"- {self.workers[wid].display_id}: {arg_data['main_argument'][:200]}")
+                    summary_parts.append(f"- {self.workers[wid].display_id}: {arg_data['main_argument']}")
         
         # Add collaboration outcomes
         if "collaborations" in self._stage_outputs:
@@ -1906,13 +1942,15 @@ class Orchestrator:
             summary_parts.append("\nCOLLABORATION OUTCOMES:")
             for wid, collab_data in collabs.items():
                 if isinstance(collab_data, dict) and "collaborative_summary" in collab_data:
-                    summary_parts.append(f"- {self.workers[wid].display_id}: {collab_data['collaborative_summary'][:300]}")
+                    summary_parts.append(f"- {self.workers[wid].display_id}: {collab_data['collaborative_summary']}")
         
         # Add user feedback
         if self._user_feedback_history:
             summary_parts.append("\nUSER FEEDBACK:")
-            for fb in self._user_feedback_history[:5]:
-                summary_parts.append(f"- Round {fb.get('round')}: {fb.get('feedback', '')}")
+            for fb in self._user_feedback_history:
+                worker_id = fb.get("worker_id")
+                worker_label = f" ({worker_id})" if worker_id else ""
+                summary_parts.append(f"- Round {fb.get('round')}{worker_label}: {fb.get('feedback', '')}")
         
         return "\n".join(summary_parts)
     
@@ -1934,14 +1972,31 @@ class Orchestrator:
             context_parts.append(f"\n[{worker.display_id}]")
             context_parts.append(f"Final Proposal: {worker.current_draft.summary}")
             
-            # Include key refinement changes
+            # Include refinement details to preserve nuance
             if worker.refinements:
-                changes = []
-                for ref in worker.refinements[-2:]:  # Last 2 refinements
-                    if getattr(ref, "patch_notes", None):
-                        changes.extend(ref.patch_notes[:2])
-                if changes:
-                    context_parts.append(f"Key Changes: {'; '.join(changes[:4])}")
+                for idx, ref in enumerate(worker.refinements, start=1):
+                    context_parts.append(f"Refinement Round {idx}:")
+                    answers = getattr(ref, "answers_to_questions", {}) or {}
+                    if answers:
+                        context_parts.append("Answers to questions:")
+                        for question, answer in answers.items():
+                            context_parts.append(f"- Q: {question}")
+                            context_parts.append(f"  A: {answer}")
+                    patch_notes = getattr(ref, "patch_notes", []) or []
+                    if patch_notes:
+                        context_parts.append("Patch notes:")
+                        for note in patch_notes:
+                            context_parts.append(f"- {note}")
+                    new_risks = getattr(ref, "new_risks", []) or []
+                    if new_risks:
+                        context_parts.append("New risks:")
+                        for risk in new_risks:
+                            context_parts.append(f"- {risk}")
+                    new_tradeoffs = getattr(ref, "new_tradeoffs", []) or []
+                    if new_tradeoffs:
+                        context_parts.append("New tradeoffs:")
+                        for tradeoff in new_tradeoffs:
+                            context_parts.append(f"- {tradeoff}")
         
         # 3. Argumentation highlights
         context_parts.append("\n\n--- ARGUMENTATION SUMMARY ---")
@@ -1950,7 +2005,7 @@ class Orchestrator:
                 for wid, arg in value.items():
                     worker = self.workers.get(wid)
                     display = worker.display_id if worker else wid
-                    main_arg = arg.get("main_argument", "")[:250]
+                    main_arg = arg.get("main_argument", "")
                     context_parts.append(f"{display}: {main_arg}")
         
         # 4. Collaboration outcomes
@@ -1958,19 +2013,20 @@ class Orchestrator:
         for key, value in self._stage_outputs.items():
             if key.startswith("collaboration"):
                 for wid, collab in value.items():
-                    summary = collab.get("collaborative_summary", "")[:200]
+                    summary = collab.get("collaborative_summary", "")
                     if summary:
                         context_parts.append(f"Merged proposal: {summary}")
-                        break  # One merged proposal is enough
         
         # 5. User feedback throughout
         context_parts.append("\n\n--- USER FEEDBACK THROUGHOUT ---")
         if self._user_feedback_history:
             for fb in self._user_feedback_history:
-                stage = fb.get("stage", "unknown")
-                feedback = fb.get("feedback", fb.get("overall", ""))[:200]
+                stage = fb.get("round", "unknown")
+                worker_id = fb.get("worker_id")
+                feedback = fb.get("feedback", fb.get("overall", ""))
+                worker_label = f" ({worker_id})" if worker_id else ""
                 if feedback:
-                    context_parts.append(f"[{stage}] {feedback}")
+                    context_parts.append(f"[{stage}{worker_label}] {feedback}")
         else:
             context_parts.append("(No user feedback provided)")
         
@@ -2236,12 +2292,15 @@ class Orchestrator:
         
         # Add round feedback state if awaiting
         if self._awaiting_round_feedback:
+            refinements = self._stage_outputs.get(f"refinements_{self._current_round}", {})
             state["round_worker_outputs"] = {
                 wid: {
                     "display_id": w.display_id,
-                    "summary": w.current_draft.summary if w.current_draft else None
+                    "summary": w.current_draft.summary if w.current_draft else None,
+                    "refinement": refinements.get(wid, {})
                 }
                 for wid, w in self.workers.items()
             }
+            state["follow_up_questions"] = self._stage_outputs.get("follow_up_questions")
         
         return state

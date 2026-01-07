@@ -211,6 +211,17 @@ async function endCouncil(showConfirm = true) {
     
     // Reset worker outputs
     initializeWorkerCards();
+
+    // Clear chat timeline and logs
+    if (window.aiCouncil.session?.clearLog) {
+        window.aiCouncil.session.clearLog();
+    }
+    if (window.aiCouncil.session?.initChatTimeline) {
+        window.aiCouncil.session.initChatTimeline();
+    }
+    if (window.aiCouncil.session?.updateWorkerRoster) {
+        window.aiCouncil.session.updateWorkerRoster();
+    }
     
     // Reset prompt area
     const promptInput = document.getElementById('prompt-input');
@@ -514,7 +525,8 @@ async function restoreFullSession() {
                     window.aiCouncil.session.showRoundFeedbackModal({
                         round: fullState.current_round,
                         total_rounds: fullState.total_rounds,
-                        worker_outputs: fullState.round_worker_outputs || {}
+                        worker_outputs: fullState.round_worker_outputs || {},
+                        follow_up_questions: fullState.follow_up_questions || null
                     });
                 }
             }, 150);
@@ -897,12 +909,13 @@ function updateTokenStats(tokenData, source = 'worker', contextLimit = null) {
         state.tokenStats.totalTokens = state.tokenStats.inputTokens + state.tokenStats.outputTokens;
     }
     
-    // Update context limit if provided (from backend)
-    if (contextLimit) {
+    // Update context limit if provided (from backend or token payload)
+    const effectiveContextLimit = contextLimit || tokenData.context_limit;
+    if (effectiveContextLimit) {
         if (source === 'synthesizer' || source === 'synth') {
-            state.tokenStats.synthContextLimit = contextLimit;
+            state.tokenStats.synthContextLimit = effectiveContextLimit;
         } else {
-            state.tokenStats.workerContextLimit = contextLimit;
+            state.tokenStats.workerContextLimit = effectiveContextLimit;
         }
     }
     
