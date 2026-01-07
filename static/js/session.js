@@ -449,11 +449,17 @@
                 } else if (event.collaboration) {
                     // Handle collaboration output
                     const collabSummary = event.collaboration.collaborative_summary || event.collaboration.raw_text || 'Collaborated';
-                    addChatMessage({
-                        workerId: event.worker_id,
-                        stage: 'collaboration',
-                        content: collabSummary
-                    });
+                    const messageId = pendingMessages[event.worker_id];
+                    if (messageId) {
+                        updateChatMessage(messageId, collabSummary, { stage: 'collaboration' });
+                        delete pendingMessages[event.worker_id];
+                    } else {
+                        addChatMessage({
+                            workerId: event.worker_id,
+                            stage: 'collaboration',
+                            content: collabSummary
+                        });
+                    }
                     appendLog('collaboration', event.worker_id, workerPersona, `Collaboration: ${truncate(collabSummary, 150)}`);
                 }
                 break;
@@ -715,6 +721,18 @@
             const contentEl = message.querySelector('.message-content');
             if (contentEl && !contentEl.querySelector('.message-meta')) {
                 contentEl.insertAdjacentHTML('beforeend', metaHtml);
+            }
+        }
+
+        if (options.stage) {
+            const headerEl = message.querySelector('.message-header');
+            if (headerEl) {
+                const stageEl = headerEl.querySelector('.message-stage-tag');
+                if (stageEl) {
+                    stageEl.textContent = options.stage;
+                } else {
+                    headerEl.insertAdjacentHTML('beforeend', `<span class="message-stage-tag">${escapeHtml(options.stage)}</span>`);
+                }
             }
         }
     }
