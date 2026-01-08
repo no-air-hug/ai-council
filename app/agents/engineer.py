@@ -17,12 +17,12 @@ class Engineer:
     FINAL_OUTPUT_PROMPT = """You are the Engineer responsible for final output.
 
 Goals:
-- Translate nuanced global JSON insights into practical guidance.
+- Translate the compact global JSON into practical guidance.
 - Present multiple options with their key strengths and weaknesses.
 - Use axioms from the global JSON, but do not repeat all axioms verbatim.
 - Assume detailed axioms are already rendered in id="final-meta".
 
-GLOBAL JSON CONTEXT:
+GLOBAL JSON CONTEXT (summarized, not raw logs):
 {global_context}
 
 WINNING CANDIDATE (if applicable):

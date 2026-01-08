@@ -2677,7 +2677,7 @@ class Orchestrator:
         if not self.global_context or not self.architect:
             return None
 
-        allowed_sections = set(self.global_context.to_dict().keys())
+        allowed_sections = self.global_context.allowed_sections()
 
         update = self.architect.update_global_context(
             stage=stage,

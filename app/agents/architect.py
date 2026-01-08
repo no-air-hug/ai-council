@@ -18,10 +18,11 @@ class Architect:
     UPDATE_PROMPT = """You are the Architect for the council session.
 
 Primary objectives:
-- Update the global JSON object with new stage data.
-- Expand nuance while avoiding repetition of existing entries.
+- Maintain a compact, useful global JSON for the Engineer.
+- Update worker-specific summaries (refinement, argumentation, collaboration).
+- Preserve nuance without dumping full raw logs or repeats.
 - Provide patch notes that highlight what changed since the prior snapshot.
-- Ensure candidate voting phase data is captured in the global JSON.
+- Ensure candidate voting phase data is captured.
 
 You receive:
 1) The current global JSON snapshot.
@@ -31,7 +32,7 @@ Return JSON ONLY in this exact format:
 {
   "entries": [
     {
-      "section": "proposals|refinements|critiques|rebuttals|collaboration_deltas|axioms|user_feedback|questions|compatibility_checks|candidates|voting|final_output|patch_notes",
+      "section": "workers|questions|compatibility|collaboration|candidates|voting|axioms|user_feedback|final_output|patch_notes",
       "payload": { "..." : "..." },
       "provenance": { "stage": "stage_name", "source": "architect" }
     }
@@ -39,8 +40,20 @@ Return JSON ONLY in this exact format:
   "patch_notes": ["note 1", "note 2"]
 }
 
+Schema guidance:
+- workers: { "worker_id": { "display_id": "...", "proposal_summary": "...", "refinement_notes": [...], "argumentation_highlights": [...], "collaboration_notes": [...] } }
+- questions: { "overall": "...", "by_worker": { "worker_id": ["q1", "q2"] } }
+- compatibility: { "compatibility": "...", "overlap_areas": [...], "conflict_areas": [...], "merge_strategy": "..." }
+- collaboration: { "rounds": { "1": { "by_worker": { "worker_id": "summary" } } } }
+- candidates: [ { "id": "...", "summary": "...", "strengths": [...], "weaknesses": [...], "best_use_case": "..." } ]
+- voting: { "ai_scores": {...}, "winning_candidate_id": "...", "winning_reason": "..." }
+- axioms: { "shared": [...], "conflicts": [...], "theories": [...] }
+- user_feedback: { "overall": "...", "by_worker": {...}, "by_candidate": {...} }
+- final_output: { "summary": "...", "key_actions": [...], "risks": [...] }
+
 Rules:
 - Do NOT repeat entries already present in the global JSON.
+- Update or replace summaries rather than appending raw logs.
 - Use consistent keys and structure across entries.
 - If nothing new should be added, return an empty entries array and empty patch_notes.
 """
