@@ -368,6 +368,20 @@ class Orchestrator:
                     refinement = WorkerRefinement.from_json(cached_refinement_entry.output_text)
                     if not worker.refinements or worker.refinements[-1].raw_text != refinement.raw_text:
                         worker.refinements.append(refinement)
+                    self.logger.log(
+                        stage="refinement",
+                        agent_id=worker_id,
+                        input_text=full_input_text,
+                        output_text=refinement.raw_text,
+                        persona_id=worker.persona.id if worker.persona else None,
+                        persona_name=worker.persona.name if worker.persona else None,
+                        memory_usage_mb=self.memory_monitor.get_memory_mb(),
+                        metadata={
+                            "round": loop + 1,
+                            "stage_label": f"worker_refinement_{loop + 1}",
+                            "cache_hit": True
+                        }
+                    )
                 else:
                     refinement = worker.refine(worker_questions, user_guidance=user_guidance)
                     self.logger.log(
@@ -380,7 +394,8 @@ class Orchestrator:
                         memory_usage_mb=self.memory_monitor.get_memory_mb(),
                         metadata={
                             "round": loop + 1,
-                            "stage_label": f"worker_refinement_{loop + 1}"
+                            "stage_label": f"worker_refinement_{loop + 1}",
+                            "cache_hit": False
                         }
                     )
 
@@ -1002,6 +1017,20 @@ class Orchestrator:
                         refinement = WorkerRefinement.from_json(cached_refinement_entry.output_text)
                         if not worker.refinements or worker.refinements[-1].raw_text != refinement.raw_text:
                             worker.refinements.append(refinement)
+                        self.logger.log(
+                            stage="refinement",
+                            agent_id=worker_id,
+                            input_text=full_input_text,
+                            output_text=refinement.raw_text,
+                            persona_id=worker.persona.id if worker.persona else None,
+                            persona_name=worker.persona.name if worker.persona else None,
+                            memory_usage_mb=self.memory_monitor.get_memory_mb(),
+                            metadata={
+                                "round": loop + 1,
+                                "stage_label": f"worker_refinement_{loop + 1}",
+                                "cache_hit": True
+                            }
+                        )
                     else:
                         refinement = worker.refine(worker_questions, user_guidance=user_guidance)
                         self.logger.log(
@@ -1014,7 +1043,8 @@ class Orchestrator:
                             memory_usage_mb=self.memory_monitor.get_memory_mb(),
                             metadata={
                                 "round": loop + 1,
-                                "stage_label": f"worker_refinement_{loop + 1}"
+                                "stage_label": f"worker_refinement_{loop + 1}",
+                                "cache_hit": False
                             }
                         )
 
@@ -1470,7 +1500,8 @@ class Orchestrator:
                     "worker_outputs": {
                         wid: {
                             "display_id": w.display_id,
-                            "summary": w.current_draft.summary if w.current_draft else None
+                            "summary": w.current_draft.summary if w.current_draft else None,
+                            "collaboration": collab_outputs.get(wid)
                         }
                         for wid, w in self.workers.items()
                     }
@@ -1588,8 +1619,7 @@ class Orchestrator:
             # Store final round arguments for voting
             self._stage_outputs["arguments"] = all_arguments[-1] if all_arguments else {}
         
-        # Proceed to AI voting
-        for event in self._run_voting():
+        for event in self._run_post_argumentation():
             yield event
     
     def _run_voting(self) -> Generator[Dict[str, Any], None, None]:
