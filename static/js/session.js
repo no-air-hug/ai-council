@@ -383,6 +383,9 @@
     // Handle pipeline events
     function handlePipelineEvent(event) {
         console.log('Pipeline event:', event);
+        if (event.context_patch && event.context_patch.context) {
+            console.log('Global context update:', event.context_patch.context);
+        }
         
         // Track token usage if present in event (but NOT for tokens_update which is handled in switch)
         if (event.tokens && window.aiCouncil?.updateTokenStats && event.type !== 'tokens_update') {
