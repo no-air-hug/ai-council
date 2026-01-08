@@ -1621,6 +1621,54 @@ class Orchestrator:
         
         for event in self._run_post_argumentation():
             yield event
+
+    def _run_post_argumentation(self) -> Generator[Dict[str, Any], None, None]:
+        """Run compatibility check, collaboration, and voting after argumentation."""
+        # Stage 3: Compatibility Check (after argumentation, before collaboration)
+        self.current_stage = PipelineStage.COMPATIBILITY_CHECK
+        yield {"type": "stage_start", "stage": "compatibility_check"}
+
+        refined_proposals = {
+            worker_id: {"summary": worker.current_draft.summary}
+            for worker_id, worker in self.workers.items()
+            if worker.current_draft
+        }
+
+        compatibility = self.synthesizer.check_compatibility(refined_proposals)
+        self._compatibility_result = compatibility
+
+        synth_tokens = self.synthesizer.get_last_token_usage()
+        yield {
+            "type": "tokens_update",
+            "source": "synthesizer",
+            "tokens": synth_tokens,
+            "context_limit": self.synth_context_window
+        }
+
+        self.logger.log(
+            stage="compatibility_check",
+            agent_id="synthesizer",
+            input_text=str(refined_proposals),
+            output_text=str(compatibility),
+            memory_usage_mb=self.memory_monitor.get_memory_mb()
+        )
+
+        yield {
+            "type": "stage_complete",
+            "stage": "compatibility_check",
+            "compatibility": compatibility
+        }
+
+        # Stage 4: Collaboration (run for feedback even when proposals diverge)
+        if self.collaboration_rounds > 0:
+            for event in self._run_collaboration(compatibility):
+                yield event
+
+            if self._awaiting_collab_feedback:
+                return
+
+        for event in self._run_voting():
+            yield event
     
     def _run_voting(self) -> Generator[Dict[str, Any], None, None]:
         """Run the AI and user voting stages."""

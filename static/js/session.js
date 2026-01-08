@@ -1391,7 +1391,9 @@
         
         // Update continue button text
         const continueBtn = document.getElementById('btn-continue-argument');
-        if (event.round >= event.total_rounds - 1) {
+        const roundNumber = Number(event.round) || 0;
+        const total = Number(event.total_rounds) || 0;
+        if (roundNumber >= total && total > 0) {
             continueBtn.innerHTML = `
                 Proceed to Voting
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1400,7 +1402,7 @@
             `;
         } else {
             continueBtn.innerHTML = `
-                Continue to Round ${event.round + 1}
+                Continue Argumentation
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="9 18 15 12 9 6"/>
                 </svg>
