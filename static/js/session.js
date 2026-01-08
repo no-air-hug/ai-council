@@ -1250,9 +1250,7 @@
                 const resolvedTensions = Array.isArray(collaboration.resolved_tensions) ? collaboration.resolved_tensions : [];
                 const newInsights = Array.isArray(collaboration.new_insights) ? collaboration.new_insights : [];
                 const confidence = typeof collaboration.confidence === 'number' ? collaboration.confidence : null;
-                const collabSections = [
-                    renderRefinementSection('Summary', `<p>${escapeHtml(summary)}</p>`, true),
-                    renderRefinementSection(
+                const collabSections = [renderRefinementSection(
                         'Specific improvements',
                         renderRefinementList(specificImprovements, 'No specific improvements listed.')
                     ),
@@ -1280,7 +1278,11 @@
                         <span class="round-worker-name">${escapeHtml(displayId)}</span>
                         <span class="message-stage-tag">collaboration</span>
                     </div>
-                    <div class="round-worker-output">${collabSections.join('')}</div>
+                    <div class="round-worker-output">${escapeHtml(summary)}</div>
+                    <div class="round-worker-refinements">
+                        ${collabSections.join('')}
+                    </div>
+                    
                     <div class="round-worker-feedback">
                         <textarea 
                             data-worker="${workerId}"
