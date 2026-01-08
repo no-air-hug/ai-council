@@ -3,7 +3,7 @@ AI Council - Global Context Model
 Stores structured deltas for cross-stage state reconstruction.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -26,6 +26,10 @@ class GlobalContext:
     collaboration_deltas: List[Dict[str, Any]] = field(default_factory=list)
     axioms: List[Dict[str, Any]] = field(default_factory=list)
     user_feedback: List[Dict[str, Any]] = field(default_factory=list)
+    candidates: List[Dict[str, Any]] = field(default_factory=list)
+    candidate_voting: List[Dict[str, Any]] = field(default_factory=list)
+    final_output: Dict[str, Any] = field(default_factory=dict)
+    patch_notes: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -39,7 +43,18 @@ class GlobalContext:
             "collaboration_deltas": self.collaboration_deltas,
             "axioms": self.axioms,
             "user_feedback": self.user_feedback,
+            "candidates": self.candidates,
+            "candidate_voting": self.candidate_voting,
+            "final_output": self.final_output,
+            "patch_notes": self.patch_notes,
         }
+
+    def update_from_dict(self, data: Dict[str, Any]) -> None:
+        """Update the global context from a dict, preserving known keys."""
+        for field_info in fields(self):
+            key = field_info.name
+            if key in data:
+                setattr(self, key, data[key])
 
     def add_entry(
         self,
