@@ -13,6 +13,7 @@ from enum import Enum
 from .config import AppConfig
 from .models.runtime import OllamaRuntime
 from .models.registry import ModelRegistry
+from .models.global_context import GlobalContext
 from .agents.worker import Worker, WorkerRefinement
 from .agents.synthesizer import Synthesizer, SynthesizerQuestions
 from .personas.manager import PersonaManager
@@ -149,6 +150,10 @@ class Orchestrator:
         # Final output feedback
         self._awaiting_final_feedback: bool = False
         self._final_output_feedback: str = ""
+
+        # Global context tracking
+        self.global_context: Optional[GlobalContext] = None
+        self._last_global_snapshot: Optional[Dict[str, Any]] = None
     
     def create_session(
         self,
@@ -234,6 +239,12 @@ class Orchestrator:
         self.voter = Voter(ai_weight=0.4, user_weight=0.6)
         
         self.current_stage = PipelineStage.SETUP
+
+        self.global_context = GlobalContext(
+            session_id=self.session_id,
+            prompt=self.prompt
+        )
+        self._last_global_snapshot = self.global_context.to_dict()
         
         return self.session_id
     
@@ -261,6 +272,20 @@ class Orchestrator:
             
             draft = worker.generate_draft(self.prompt, self.constraints)
             drafts[worker_id] = draft.to_dict()
+            self._append_global_context(
+                section="proposals",
+                payload={
+                    "worker_id": worker_id,
+                    "display_id": worker.display_id,
+                    "draft": draft.to_dict(),
+                    "constraints": self.constraints,
+                },
+                provenance={
+                    "stage": "worker_draft",
+                    "persona_id": worker.persona.id if worker.persona else None,
+                    "persona_name": worker.persona.name if worker.persona else None,
+                }
+            )
             
             # Log
             self.logger.log(
@@ -277,11 +302,16 @@ class Orchestrator:
                 "type": "worker_complete",
                 "worker_id": worker_id,
                 "draft": draft.to_dict(),
-                "tokens": worker.get_last_token_usage()
+                "tokens": worker.get_last_token_usage(),
+                "context_patch": self._emit_context_patch()
             }
         
         self._stage_outputs["drafts"] = drafts
-        yield {"type": "stage_complete", "stage": "worker_drafts"}
+        yield {
+            "type": "stage_complete",
+            "stage": "worker_drafts",
+            "context_patch": self._emit_context_patch()
+        }
         
         # Unload worker model if aggressive unloading
         if self.config.mode_config.memory.model_unloading == "aggressive":
@@ -325,7 +355,8 @@ class Orchestrator:
         yield {
             "type": "stage_complete",
             "stage": "synth_questions",
-            "questions": questions.to_dict()
+            "questions": questions.to_dict(),
+            "context_patch": self._emit_context_patch()
         }
         
         # Stage 3: Worker Refinement with interactive rounds
@@ -400,12 +431,27 @@ class Orchestrator:
                     )
 
                 refinements[worker_id] = refinement.to_dict()
+                self._append_global_context(
+                    section="refinements",
+                    payload={
+                        "worker_id": worker_id,
+                        "display_id": worker.display_id,
+                        "round": loop + 1,
+                        "refinement": refinement.to_dict(),
+                    },
+                    provenance={
+                        "stage": "worker_refinement",
+                        "persona_id": worker.persona.id if worker.persona else None,
+                        "persona_name": worker.persona.name if worker.persona else None,
+                    }
+                )
                 
                 yield {
                     "type": "worker_complete",
                     "worker_id": worker_id,
                     "refinement": refinement.to_dict(),
-                    "tokens": worker.get_last_token_usage()
+                    "tokens": worker.get_last_token_usage(),
+                    "context_patch": self._emit_context_patch()
                 }
 
                 if len(worker.refinements) > 1:
@@ -415,7 +461,11 @@ class Orchestrator:
                     similarity_hits.append(similarity >= self.refinement_similarity_threshold)
             
             self._stage_outputs[f"refinements_{loop + 1}"] = refinements
-            yield {"type": "stage_complete", "stage": f"worker_refinement_{loop + 1}"}
+            yield {
+                "type": "stage_complete",
+                "stage": f"worker_refinement_{loop + 1}",
+                "context_patch": self._emit_context_patch()
+            }
 
             if similarity_hits and all(similarity_hits):
                 yield {
@@ -460,7 +510,8 @@ class Orchestrator:
                         }
                         for wid, w in self.workers.items()
                     },
-                    "follow_up_questions": follow_up_questions.to_dict() if follow_up_questions else None
+                    "follow_up_questions": follow_up_questions.to_dict() if follow_up_questions else None,
+                    "context_patch": self._emit_context_patch()
                 }
                 # Pipeline will resume when continue_pipeline is called
                 return
@@ -564,6 +615,20 @@ class Orchestrator:
                 },
                 memory_usage_mb=self.memory_monitor.get_memory_mb()
             )
+
+        self._append_global_context(
+            section="user_feedback",
+            payload={
+                "votes": votes,
+                "candidate_feedback": candidate_feedback or {},
+                "overall_feedback": overall_feedback,
+                "worker_feedback": worker_feedback or {},
+                "synthesizer_feedback": synthesizer_feedback,
+                "prompt_rating": prompt_rating,
+                "prompt_feedback": prompt_feedback,
+            },
+            provenance={"stage": "user_voting"}
+        )
         
         self._stage_outputs["voting_result"] = result.to_dict()
         
@@ -651,6 +716,17 @@ class Orchestrator:
         )
         
         self._stage_outputs["final_output"] = final_output
+
+        self._append_global_context(
+            section="proposals",
+            payload={
+                "final_output": final_output,
+                "winning_candidate": winning_candidate.to_dict(),
+                "ai_score": voting_result["ai_scores"].get(winning_id, 0),
+                "user_selection": voting_result["winning_reason"],
+            },
+            provenance={"stage": "final_output", "source": "synthesizer"}
+        )
         
         # Yield final output and await optional feedback
         self._awaiting_final_feedback = True
@@ -659,7 +735,8 @@ class Orchestrator:
             "type": "final_output",
             "output": final_output,
             "winning_candidate": winning_candidate.to_dict(),
-            "awaiting_feedback": True
+            "awaiting_feedback": True,
+            "context_patch": self._emit_context_patch()
         }
     
     def submit_final_feedback(self, feedback: str) -> Dict[str, Any]:
@@ -683,6 +760,15 @@ class Orchestrator:
                 input_text=self._stage_outputs.get("final_output", ""),
                 output_text=feedback,
                 memory_usage_mb=self.memory_monitor.get_memory_mb()
+            )
+
+            self._append_global_context(
+                section="user_feedback",
+                payload={
+                    "round": "final",
+                    "feedback": feedback,
+                },
+                provenance={"stage": "final_output_feedback"}
             )
             
             # Add to feedback history for future analysis
@@ -813,6 +899,16 @@ class Orchestrator:
         
         self._skip_to_synthesis = skip_to_synthesis
         self._awaiting_round_feedback = False
+
+        self._append_global_context(
+            section="user_feedback",
+            payload={
+                "round": round_num,
+                "worker_feedback": worker_feedback or {},
+                "skip_to_synthesis": skip_to_synthesis,
+            },
+            provenance={"stage": "round_feedback"}
+        )
         
         return {
             "round": round_num,
@@ -867,6 +963,16 @@ class Orchestrator:
         
         self._skip_to_synthesis = skip_to_synthesis
         self._awaiting_collab_feedback = False
+
+        self._append_global_context(
+            section="user_feedback",
+            payload={
+                "round": round_num,
+                "worker_feedback": worker_feedback or {},
+                "skip_to_synthesis": skip_to_synthesis,
+            },
+            provenance={"stage": "collab_feedback"}
+        )
         
         return {
             "round": round_num,
@@ -921,6 +1027,16 @@ class Orchestrator:
         
         self._skip_to_voting = skip_to_voting
         self._awaiting_argument_feedback = False
+
+        self._append_global_context(
+            section="user_feedback",
+            payload={
+                "round": round_num,
+                "worker_feedback": worker_feedback or {},
+                "skip_to_voting": skip_to_voting,
+            },
+            provenance={"stage": "argument_feedback"}
+        )
         
         return {
             "round": round_num,
@@ -1049,12 +1165,27 @@ class Orchestrator:
                         )
 
                     refinements[worker_id] = refinement.to_dict()
+                    self._append_global_context(
+                        section="refinements",
+                        payload={
+                            "worker_id": worker_id,
+                            "display_id": worker.display_id,
+                            "round": loop + 1,
+                            "refinement": refinement.to_dict(),
+                        },
+                        provenance={
+                            "stage": "worker_refinement",
+                            "persona_id": worker.persona.id if worker.persona else None,
+                            "persona_name": worker.persona.name if worker.persona else None,
+                        }
+                    )
                     
                     yield {
                         "type": "worker_complete",
                         "worker_id": worker_id,
                         "refinement": refinement.to_dict(),
-                        "tokens": worker.get_last_token_usage()
+                        "tokens": worker.get_last_token_usage(),
+                        "context_patch": self._emit_context_patch()
                     }
 
                     if len(worker.refinements) > 1:
@@ -1064,7 +1195,11 @@ class Orchestrator:
                         similarity_hits.append(similarity >= self.refinement_similarity_threshold)
                 
                 self._stage_outputs[f"refinements_{loop + 1}"] = refinements
-                yield {"type": "stage_complete", "stage": f"worker_refinement_{loop + 1}"}
+                yield {
+                    "type": "stage_complete",
+                    "stage": f"worker_refinement_{loop + 1}",
+                    "context_patch": self._emit_context_patch()
+                }
 
                 if similarity_hits and all(similarity_hits):
                     yield {
@@ -1098,7 +1233,8 @@ class Orchestrator:
                             }
                             for wid, w in self.workers.items()
                         },
-                        "follow_up_questions": follow_up_questions.to_dict() if follow_up_questions else None
+                        "follow_up_questions": follow_up_questions.to_dict() if follow_up_questions else None,
+                        "context_patch": self._emit_context_patch()
                     }
                     return
         
@@ -1161,7 +1297,8 @@ class Orchestrator:
         yield {
             "type": "stage_complete",
             "stage": "candidate_synthesis",
-            "candidates": [c.to_dict() for c in candidates]
+            "candidates": [c.to_dict() for c in candidates],
+            "context_patch": self._emit_context_patch()
         }
         
         # Stage 2: Multi-round Argumentation
@@ -1210,6 +1347,30 @@ class Orchestrator:
                 # Pass previous arguments context for counter-arguments and user guidance
                 argument = worker.argue(alternatives, self.rubric, counter_arguments=previous_args, user_guidance=user_guidance)
                 round_arguments[worker_id] = argument.to_dict()
+                if self.global_context:
+                    payload = {
+                        "worker_id": worker_id,
+                        "display_id": worker.display_id,
+                        "round": arg_round + 1,
+                        "argument": argument.to_dict(),
+                    }
+                    provenance = {
+                        "stage": "argumentation",
+                        "persona_id": worker.persona.id if worker.persona else None,
+                        "persona_name": worker.persona.name if worker.persona else None,
+                    }
+                    if arg_round == 0:
+                        self._append_global_context(
+                            section="critiques",
+                            payload=payload,
+                            provenance=provenance
+                        )
+                    else:
+                        self._append_global_context(
+                            section="rebuttals",
+                            payload=payload,
+                            provenance=provenance
+                        )
                 
                 self.logger.log(
                     stage=round_label,
@@ -1225,12 +1386,17 @@ class Orchestrator:
                     "type": "worker_complete",
                     "worker_id": worker_id,
                     "argument": argument.to_dict(),
-                    "tokens": worker.get_last_token_usage()
+                    "tokens": worker.get_last_token_usage(),
+                    "context_patch": self._emit_context_patch()
                 }
             
             all_arguments.append(round_arguments)
             self._stage_outputs[f"arguments_round_{arg_round + 1}"] = round_arguments
-            yield {"type": "stage_complete", "stage": round_label}
+            yield {
+                "type": "stage_complete",
+                "stage": round_label,
+                "context_patch": self._emit_context_patch()
+            }
             
             # Synthesizer commentary after each argumentation round (except the last)
             if arg_round < self.argument_rounds - 1:
@@ -1258,7 +1424,8 @@ class Orchestrator:
                             "rubric_alignment": round_arguments.get(wid, {}).get("rubric_alignment") or ""
                         }
                         for wid, w in self.workers.items()
-                    }
+                    },
+                    "context_patch": self._emit_context_patch()
                 }
                 return  # Pipeline will resume when continue_pipeline is called
         
@@ -1299,7 +1466,8 @@ class Orchestrator:
         yield {
             "type": "stage_complete",
             "stage": "compatibility_check",
-            "compatibility": compatibility
+            "compatibility": compatibility,
+            "context_patch": self._emit_context_patch()
         }
         
         # Stage 4: Collaboration (run for feedback even when proposals diverge)
@@ -1384,11 +1552,32 @@ class Orchestrator:
                     "type": "worker_complete",
                     "worker_id": worker_id,
                     "collaboration": collab_output,
-                    "tokens": worker.get_last_token_usage()
+                    "tokens": worker.get_last_token_usage(),
+                    "context_patch": self._emit_context_patch()
                 }
             
             self._stage_outputs[f"collaboration_round_{collab_round + 1}"] = collab_outputs
-            yield {"type": "stage_complete", "stage": round_label}
+            for wid, output in collab_outputs.items():
+                self._append_global_context(
+                    section="collaboration_deltas",
+                    payload={
+                        "worker_id": wid,
+                        "display_id": self.workers[wid].display_id,
+                        "round": collab_round + 1,
+                        "collaboration": output,
+                        "overlap_areas": overlap_areas,
+                        "merge_strategy": merge_strategy,
+                    },
+                    provenance={
+                        "stage": "collaboration",
+                        "compatible_pairs": compatible_pairs,
+                    }
+                )
+            yield {
+                "type": "stage_complete",
+                "stage": round_label,
+                "context_patch": self._emit_context_patch()
+            }
             
             # Pause for feedback between collaboration rounds (except the last)
             if collab_round < self.collaboration_rounds - 1:
@@ -1405,7 +1594,8 @@ class Orchestrator:
                             "collaboration": collab_outputs.get(wid)
                         }
                         for wid, w in self.workers.items()
-                    }
+                    },
+                    "context_patch": self._emit_context_patch()
                 }
                 return  # Pipeline will resume when continue_pipeline is called
     
@@ -1484,11 +1674,32 @@ class Orchestrator:
                     "type": "worker_complete",
                     "worker_id": worker_id,
                     "collaboration": collab_output,
-                    "tokens": worker.get_last_token_usage()
+                    "tokens": worker.get_last_token_usage(),
+                    "context_patch": self._emit_context_patch()
                 }
             
             self._stage_outputs[f"collaboration_round_{collab_round + 1}"] = collab_outputs
-            yield {"type": "stage_complete", "stage": round_label}
+            for wid, output in collab_outputs.items():
+                self._append_global_context(
+                    section="collaboration_deltas",
+                    payload={
+                        "worker_id": wid,
+                        "display_id": self.workers[wid].display_id,
+                        "round": collab_round + 1,
+                        "collaboration": output,
+                        "overlap_areas": overlap_areas,
+                        "merge_strategy": merge_strategy,
+                    },
+                    provenance={
+                        "stage": "collaboration",
+                        "compatible_pairs": compatible_pairs,
+                    }
+                )
+            yield {
+                "type": "stage_complete",
+                "stage": round_label,
+                "context_patch": self._emit_context_patch()
+            }
             
             if collab_round < self.collaboration_rounds - 1:
                 self._awaiting_collab_feedback = True
@@ -1504,7 +1715,8 @@ class Orchestrator:
                             "collaboration": collab_outputs.get(wid)
                         }
                         for wid, w in self.workers.items()
-                    }
+                    },
+                    "context_patch": self._emit_context_patch()
                 }
                 return
         
@@ -1564,6 +1776,22 @@ class Orchestrator:
                     
                     argument = worker.argue(alternatives, self.rubric, counter_arguments=previous_args, user_guidance=user_guidance)
                     round_arguments[worker_id] = argument.to_dict()
+                    if self.global_context:
+                        section = "critiques" if arg_round == 0 else "rebuttals"
+                        self._append_global_context(
+                            section=section,
+                            payload={
+                                "worker_id": worker_id,
+                                "display_id": worker.display_id,
+                                "round": arg_round + 1,
+                                "argument": argument.to_dict(),
+                            },
+                            provenance={
+                                "stage": "argumentation",
+                                "persona_id": worker.persona.id if worker.persona else None,
+                                "persona_name": worker.persona.name if worker.persona else None,
+                            }
+                        )
                     
                     self.logger.log(
                         stage=round_label,
@@ -1579,12 +1807,17 @@ class Orchestrator:
                         "type": "worker_complete",
                         "worker_id": worker_id,
                         "argument": argument.to_dict(),
-                        "tokens": worker.get_last_token_usage()
+                        "tokens": worker.get_last_token_usage(),
+                        "context_patch": self._emit_context_patch()
                     }
                 
                 all_arguments.append(round_arguments)
                 self._stage_outputs[f"arguments_round_{arg_round + 1}"] = round_arguments
-                yield {"type": "stage_complete", "stage": round_label}
+                yield {
+                    "type": "stage_complete",
+                    "stage": round_label,
+                    "context_patch": self._emit_context_patch()
+                }
                 
                 # Synthesizer commentary after each round (except the last)
                 if arg_round < self.argument_rounds - 1:
@@ -1612,7 +1845,8 @@ class Orchestrator:
                                 "rubric_alignment": round_arguments.get(wid, {}).get("rubric_alignment") or ""
                             }
                             for wid, w in self.workers.items()
-                        }
+                        },
+                        "context_patch": self._emit_context_patch()
                     }
                     return
             
@@ -1656,7 +1890,8 @@ class Orchestrator:
         yield {
             "type": "stage_complete",
             "stage": "compatibility_check",
-            "compatibility": compatibility
+            "compatibility": compatibility,
+            "context_patch": self._emit_context_patch()
         }
 
         # Stage 4: Collaboration (run for feedback even when proposals diverge)
@@ -1699,7 +1934,8 @@ class Orchestrator:
         yield {
             "type": "stage_complete",
             "stage": "ai_voting",
-            "scores": {cid: s.to_dict() for cid, s in scores.items()}
+            "scores": {cid: s.to_dict() for cid, s in scores.items()},
+            "context_patch": self._emit_context_patch()
         }
         
         # Stage 7: Wait for User Voting
@@ -1710,7 +1946,8 @@ class Orchestrator:
             "candidates": [c.to_dict() for c in candidates],
             "ai_scores": ai_scores,
             "arguments": arguments,
-            "worker_info": self.get_worker_info()
+            "worker_info": self.get_worker_info(),
+            "context_patch": self._emit_context_patch()
         }
     
     def run_axiom_analysis(self) -> Generator[Dict[str, Any], None, None]:
@@ -1748,7 +1985,8 @@ class Orchestrator:
             yield {
                 "type": "axiom_extracted",
                 "source": "user",
-                "axioms": self._user_axioms
+                "axioms": self._user_axioms,
+                "context_patch": self._emit_context_patch()
             }
         
         # Step 2: Collect worker axioms
@@ -1791,7 +2029,8 @@ class Orchestrator:
                     "axioms": self._worker_axioms[worker_id],
                     "axiom_count": len(self._worker_axioms[worker_id]),
                     "theory_contribution": worker_axiom_result.get("theory_contribution", ""),
-                    "parsing_successful": len(extracted_axioms) > 0
+                    "parsing_successful": len(extracted_axioms) > 0,
+                    "context_patch": self._emit_context_patch()
                 }
             except Exception as e:
                 import logging
@@ -1802,7 +2041,8 @@ class Orchestrator:
                     "source": worker_id,
                     "worker_display_id": worker.display_id,
                     "error": str(e),
-                    "axioms": []
+                    "axioms": [],
+                    "context_patch": self._emit_context_patch()
                 }
         
         # Step 3: Synthesizer builds axiom network
@@ -1913,6 +2153,19 @@ class Orchestrator:
         axiom_network.save(str(axiom_file))
         
         self._stage_outputs["axiom_network"] = axiom_network.to_mindmap_json()
+
+        self._append_global_context(
+            section="axioms",
+            payload={
+                "user_axioms": self._user_axioms,
+                "worker_axioms": self._worker_axioms,
+                "meta_axioms": network_result.get("meta_axioms", []),
+                "shared_axioms": network_result.get("shared_axioms", []),
+                "conflicts": network_result.get("conflicts", []),
+                "theories": network_result.get("theories", []),
+            },
+            provenance={"stage": "axiom_analysis"}
+        )
         
         yield {
             "type": "stage_complete",
@@ -1925,7 +2178,8 @@ class Orchestrator:
                 "conflicts": len(network_result.get("conflicts", [])),
                 "theories": network_result.get("theories", []),
                 "file_saved": str(axiom_file)
-            }
+            },
+            "context_patch": self._emit_context_patch()
         }
     
     def _build_shared_context_for_argumentation(self) -> str:
@@ -2294,6 +2548,42 @@ class Orchestrator:
             payload["updated_summary"] = refinement_data.get("updated_summary")
 
         return payload
+
+    def _emit_context_patch(self) -> Dict[str, Any]:
+        """Emit a JSON-style patch payload for the global context."""
+        if not self.global_context:
+            return {"patch": [], "context": None}
+
+        current = self.global_context.to_dict()
+        previous = self._last_global_snapshot or {}
+        patch = list(difflib.ndiff(
+            str(previous).splitlines(),
+            str(current).splitlines()
+        ))
+        self._last_global_snapshot = current
+        return {"patch": patch, "context": current}
+
+    def _append_global_context(
+        self,
+        section: str,
+        payload: Dict[str, Any],
+        provenance: Optional[Dict[str, Any]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Append to global context and log the update."""
+        if not self.global_context:
+            return None
+
+        entry = self.global_context.add_entry(section, payload, provenance)
+        if self.logger:
+            self.logger.log(
+                stage="global_context_update",
+                agent_id="system",
+                input_text=str(provenance or {}),
+                output_text=str(entry),
+                memory_usage_mb=self.memory_monitor.get_memory_mb(),
+                metadata={"section": section}
+            )
+        return entry
     
     def get_full_state(self) -> Dict[str, Any]:
         """
@@ -2338,6 +2628,9 @@ class Orchestrator:
                 for wid, w in self.workers.items()
             }
         }
+
+        if self.global_context:
+            state["global_context"] = self.global_context.to_dict()
         
         # Add voting data if in user_voting stage
         if self.current_stage == PipelineStage.USER_VOTING:
