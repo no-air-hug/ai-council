@@ -2677,6 +2677,8 @@ class Orchestrator:
         if not self.global_context or not self.architect:
             return None
 
+        allowed_sections = set(self.global_context.to_dict().keys())
+
         update = self.architect.update_global_context(
             stage=stage,
             stage_payload=payload,
@@ -2688,7 +2690,15 @@ class Orchestrator:
             section = entry.get("section")
             entry_payload = entry.get("payload", {})
             entry_provenance = entry.get("provenance", {"stage": stage, "source": "architect"})
-            if not section:
+            if not section or section not in allowed_sections:
+                if self.logger:
+                    self.logger.log(
+                        stage="global_context_update_skipped",
+                        agent_id="architect",
+                        input_text=str({"stage": stage, "section": section}),
+                        output_text="Skipped unknown global context section",
+                        memory_usage_mb=self.memory_monitor.get_memory_mb()
+                    )
                 continue
             self._append_global_context(section, entry_payload, entry_provenance)
 
