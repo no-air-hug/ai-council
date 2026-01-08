@@ -1278,7 +1278,11 @@
                         <span class="round-worker-name">${escapeHtml(displayId)}</span>
                         <span class="message-stage-tag">collaboration</span>
                     </div>
-                    <div class="round-worker-output">${escapeHtml(summary)}</div>
+
+                    <div class="round-worker-output">
+                        <div class="round-worker-output-label">Summary</div>
+                        <div class="round-worker-output-text">${escapeHtml(summary)}</div>
+                    </div>
                     <div class="round-worker-refinements">
                         ${collabSections.join('')}
                     </div>

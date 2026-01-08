@@ -2142,6 +2142,9 @@ body {
     overflow-y: auto;
     margin-bottom: var(--space-sm);
     white-space: pre-wrap;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
 }
 
 .round-worker-feedback textarea {
@@ -2844,3 +2847,10 @@ body {
     color: var(--accent-primary);
 }
 
+.round-worker-list{
+    padding-left: 35px;
+}
+
+.round-worker-refinements{
+    padding: 10px 0;
+}
