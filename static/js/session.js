@@ -1042,6 +1042,11 @@
             </details>
         `;
     }
+
+    function renderArgumentTextSection(title, bodyText, emptyLabel, isOpen = false) {
+        const content = bodyText ? `<p>${escapeHtml(bodyText)}</p>` : `<div class="round-worker-empty">${escapeHtml(emptyLabel)}</div>`;
+        return renderRefinementSection(title, content, isOpen);
+    }
     
     // Show round feedback modal
     function showRoundFeedbackModal(event) {
@@ -1295,13 +1300,27 @@
             
             const mainArg = workerData.main_argument || 'No argument presented';
             const displayId = workerData.display_id || workerId;
+            const keyStrengths = Array.isArray(workerData.key_strengths) ? workerData.key_strengths : [];
+            const critique = workerData.critique_of_alternatives || '';
+            const rubricAlignment = workerData.rubric_alignment || '';
+            const argumentSections = [
+                renderRefinementSection('Key strengths', renderRefinementList(keyStrengths, 'No key strengths listed.')),
+                renderArgumentTextSection('Critique of alternatives', critique, 'No critique provided.'),
+                renderArgumentTextSection('Rubric alignment', rubricAlignment, 'No rubric alignment provided.')
+            ];
             
             card.innerHTML = `
                 <div class="round-worker-header">
                     <span class="round-worker-name">${escapeHtml(displayId)}</span>
                     <span class="message-stage-tag">argument</span>
                 </div>
-                <div class="round-worker-output">${escapeHtml(mainArg)}</div>
+                <div class="round-worker-output">
+                    <div class="round-worker-output-label">Main argument</div>
+                    <div class="round-worker-output-text">${escapeHtml(mainArg)}</div>
+                </div>
+                <div class="round-worker-refinements">
+                    ${argumentSections.join('')}
+                </div>
                 <div class="round-worker-feedback">
                     <textarea 
                         data-worker="${workerId}"

@@ -1214,7 +1214,10 @@ class Orchestrator:
                     "worker_arguments": {
                         wid: {
                             "display_id": w.display_id,
-                            "main_argument": round_arguments.get(wid, {}).get("main_argument", "")
+                            "main_argument": round_arguments.get(wid, {}).get("main_argument", ""),
+                            "key_strengths": round_arguments.get(wid, {}).get("key_strengths") or [],
+                            "critique_of_alternatives": round_arguments.get(wid, {}).get("critique_of_alternatives") or "",
+                            "rubric_alignment": round_arguments.get(wid, {}).get("rubric_alignment") or ""
                         }
                         for wid, w in self.workers.items()
                     }
@@ -1564,7 +1567,10 @@ class Orchestrator:
                         "worker_arguments": {
                             wid: {
                                 "display_id": w.display_id,
-                                "main_argument": round_arguments.get(wid, {}).get("main_argument", "")
+                                "main_argument": round_arguments.get(wid, {}).get("main_argument", ""),
+                                "key_strengths": round_arguments.get(wid, {}).get("key_strengths") or [],
+                                "critique_of_alternatives": round_arguments.get(wid, {}).get("critique_of_alternatives") or "",
+                                "rubric_alignment": round_arguments.get(wid, {}).get("rubric_alignment") or ""
                             }
                             for wid, w in self.workers.items()
                         }
