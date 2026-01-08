@@ -188,6 +188,10 @@ def register_routes(app: Flask):
         synth_max_tokens = data.get("synth_max_tokens")  # Optional, for session override
         worker_context_window = data.get("worker_context_window")  # Optional, UI override (1K-32K)
         synth_context_window = data.get("synth_context_window")  # Optional, UI override (1K-32K)
+        architect_max_tokens = data.get("architect_max_tokens")
+        engineer_max_tokens = data.get("engineer_max_tokens")
+        architect_context_window = data.get("architect_context_window")
+        engineer_context_window = data.get("engineer_context_window")
         
         if not prompt:
             return jsonify({"error": "Prompt is required"}), 400
@@ -199,7 +203,11 @@ def register_routes(app: Flask):
             worker_max_tokens=worker_max_tokens,
             synth_max_tokens=synth_max_tokens,
             worker_context_window=worker_context_window,
-            synth_context_window=synth_context_window
+            synth_context_window=synth_context_window,
+            architect_max_tokens=architect_max_tokens,
+            architect_context_window=architect_context_window,
+            engineer_max_tokens=engineer_max_tokens,
+            engineer_context_window=engineer_context_window
         )
         session_id = orchestrator.create_session(
             prompt, 
@@ -548,4 +556,3 @@ def register_routes(app: Flask):
             "mode": config_manager.config.mode.value,
             "ollama": ollama_status
         })
-

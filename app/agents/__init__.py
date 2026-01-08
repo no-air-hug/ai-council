@@ -1,11 +1,12 @@
 """
 AI Council - Agent Components
-Workers and Synthesizer agents for the multi-agent pipeline.
+Workers, Architect, Engineer, and Synthesizer agents for the multi-agent pipeline.
 """
 
-from .worker import Worker
+from .architect import Architect
+from .engineer import Engineer
 from .synthesizer import Synthesizer
+from .worker import Worker
 
-__all__ = ["Worker", "Synthesizer"]
-
+__all__ = ["Architect", "Engineer", "Synthesizer", "Worker"]
 

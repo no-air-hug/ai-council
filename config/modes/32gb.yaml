@@ -17,6 +17,18 @@ synthesizer:
   context_window: 32768  # 32K tokens
   max_output_tokens: 4000
 
+# Architect Configuration
+architect:
+  model: "qwen2.5:7b"
+  context_window: 32768
+  max_output_tokens: 4000
+
+# Engineer Configuration
+engineer:
+  model: "qwen2.5:7b"
+  context_window: 32768
+  max_output_tokens: 4000
+
 # Token Limits
 token_limits:
   worker_draft: 1500
@@ -39,4 +51,3 @@ pipeline:
   axiom_rounds: 1  # Number of axiom analysis rounds (LAST stage)
   require_structured_output: true
   refinement_similarity_threshold: 0.92
-
