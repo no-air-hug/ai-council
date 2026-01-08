@@ -265,6 +265,14 @@ Think critically:
 - What NEW insights emerge from combining approaches?
 - How do you resolve remaining tensions?
 
+Respond in JSON. Required keys (include them even if empty):
+- collaborative_summary (string)
+- specific_improvements (array)
+- integrated_mechanisms (object mapping worker -> mechanism)
+- resolved_tensions (array)
+- new_insights (array)
+- confidence (number 0.0 to 1.0)
+
 Respond in JSON:
 {{
     "collaborative_summary": "Your EVOLVED proposal with specific improvements from collaboration (be concrete!)",
@@ -789,17 +797,40 @@ Respond in JSON:
         
         self._add_to_context("assistant", result.text)
         
+        defaults = {
+            "collaborative_summary": "",
+            "specific_improvements": [],
+            "integrated_mechanisms": {},
+            "resolved_tensions": [],
+            "new_insights": [],
+            "confidence": 0.5
+        }
+
         try:
             data = json.loads(result.text)
         except json.JSONDecodeError:
-            data = {
-                "collaborative_summary": result.text,
-                "incorporated_from_others": [],
-                "your_unique_contributions": [],
-                "remaining_differences": []
-            }
-        
-        data["raw_text"] = result.text
+            data = defaults.copy()
+            data["collaborative_summary"] = result.text
+
+        normalized = defaults.copy()
+        if isinstance(data, dict):
+            normalized.update(data)
+
+        if not isinstance(normalized.get("specific_improvements"), list):
+            normalized["specific_improvements"] = [str(normalized.get("specific_improvements"))] if normalized.get("specific_improvements") else []
+        if not isinstance(normalized.get("resolved_tensions"), list):
+            normalized["resolved_tensions"] = [str(normalized.get("resolved_tensions"))] if normalized.get("resolved_tensions") else []
+        if not isinstance(normalized.get("new_insights"), list):
+            normalized["new_insights"] = [str(normalized.get("new_insights"))] if normalized.get("new_insights") else []
+        if not isinstance(normalized.get("integrated_mechanisms"), dict):
+            normalized["integrated_mechanisms"] = {}
+
+        try:
+            normalized["confidence"] = float(normalized.get("confidence", defaults["confidence"]))
+        except (TypeError, ValueError):
+            normalized["confidence"] = defaults["confidence"]
+
+        normalized["raw_text"] = result.text
         
         self._history.append({
             "stage": "collaboration",
@@ -808,7 +839,7 @@ Respond in JSON:
             "tokens": result.tokens
         })
         
-        return data
+        return normalized
     
     def analyze_axioms(
         self,

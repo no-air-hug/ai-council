@@ -9,33 +9,33 @@ workers:
   count: 2  # Can go up to 3 if needed
   model: "qwen2.5:7b"  # 7B model, 4-bit quantized
   context_window: 8192  # 8K tokens
-  max_output_tokens: 1500  # Increased to prevent JSON truncation
+  max_output_tokens: 3000  # Increased to prevent JSON truncation
 
 # Synthesizer Configuration
 synthesizer:
   model: "qwen2.5:7b"  # 7B model, 4-bit quantized (loads when workers done)
   context_window: 20480  # 20K tokens
-  max_output_tokens: 4000
+  max_output_tokens: 8000
 
 # Token Limits
 token_limits:
-  worker_draft: 1500
-  synth_questions: 4000
-  refinement: 1500
-  candidate_synthesis: 2000
-  argumentation: 1500
+  worker_draft: 2000
+  synth_questions: 8000
+  refinement: 2000
+  candidate_synthesis: 4000
+  argumentation: 2000
 
 # Memory Management
 memory:
   system_reserved_gb: 2
-  model_unloading: "aggressive"  # Unload between stages
+  model_unloading: "moderate"
   max_ram_usage_percent: 85
 
 # Pipeline Settings
 pipeline:
-  refinement_loops: 3
+  refinement_loops: 2
   argumentation_rounds: 2  # Number of argument/counter-argument rounds
-  collaboration_rounds: 3  # Number of collaboration rounds when proposals are compatible
+  collaboration_rounds: 2  # Number of collaboration rounds when proposals are compatible
   axiom_rounds: 1  # Number of axiom analysis rounds (LAST stage)
   require_structured_output: true
   refinement_similarity_threshold: 0.92

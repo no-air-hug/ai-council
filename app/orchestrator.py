@@ -368,6 +368,20 @@ class Orchestrator:
                     refinement = WorkerRefinement.from_json(cached_refinement_entry.output_text)
                     if not worker.refinements or worker.refinements[-1].raw_text != refinement.raw_text:
                         worker.refinements.append(refinement)
+                    self.logger.log(
+                        stage="refinement",
+                        agent_id=worker_id,
+                        input_text=full_input_text,
+                        output_text=refinement.raw_text,
+                        persona_id=worker.persona.id if worker.persona else None,
+                        persona_name=worker.persona.name if worker.persona else None,
+                        memory_usage_mb=self.memory_monitor.get_memory_mb(),
+                        metadata={
+                            "round": loop + 1,
+                            "stage_label": f"worker_refinement_{loop + 1}",
+                            "cache_hit": True
+                        }
+                    )
                 else:
                     refinement = worker.refine(worker_questions, user_guidance=user_guidance)
                     self.logger.log(
@@ -377,7 +391,12 @@ class Orchestrator:
                         output_text=refinement.raw_text,
                         persona_id=worker.persona.id if worker.persona else None,
                         persona_name=worker.persona.name if worker.persona else None,
-                        memory_usage_mb=self.memory_monitor.get_memory_mb()
+                        memory_usage_mb=self.memory_monitor.get_memory_mb(),
+                        metadata={
+                            "round": loop + 1,
+                            "stage_label": f"worker_refinement_{loop + 1}",
+                            "cache_hit": False
+                        }
                     )
 
                 refinements[worker_id] = refinement.to_dict()
@@ -998,6 +1017,20 @@ class Orchestrator:
                         refinement = WorkerRefinement.from_json(cached_refinement_entry.output_text)
                         if not worker.refinements or worker.refinements[-1].raw_text != refinement.raw_text:
                             worker.refinements.append(refinement)
+                        self.logger.log(
+                            stage="refinement",
+                            agent_id=worker_id,
+                            input_text=full_input_text,
+                            output_text=refinement.raw_text,
+                            persona_id=worker.persona.id if worker.persona else None,
+                            persona_name=worker.persona.name if worker.persona else None,
+                            memory_usage_mb=self.memory_monitor.get_memory_mb(),
+                            metadata={
+                                "round": loop + 1,
+                                "stage_label": f"worker_refinement_{loop + 1}",
+                                "cache_hit": True
+                            }
+                        )
                     else:
                         refinement = worker.refine(worker_questions, user_guidance=user_guidance)
                         self.logger.log(
@@ -1007,7 +1040,12 @@ class Orchestrator:
                             output_text=refinement.raw_text,
                             persona_id=worker.persona.id if worker.persona else None,
                             persona_name=worker.persona.name if worker.persona else None,
-                            memory_usage_mb=self.memory_monitor.get_memory_mb()
+                            memory_usage_mb=self.memory_monitor.get_memory_mb(),
+                            metadata={
+                                "round": loop + 1,
+                                "stage_label": f"worker_refinement_{loop + 1}",
+                                "cache_hit": False
+                            }
                         )
 
                     refinements[worker_id] = refinement.to_dict()
@@ -1264,9 +1302,8 @@ class Orchestrator:
             "compatibility": compatibility
         }
         
-        # Stage 4: Collaboration (if compatible or partially compatible)
-        is_compatible = compatibility.get("compatibility") in ["compatible", "partially_compatible"]
-        if is_compatible and self.collaboration_rounds > 0:
+        # Stage 4: Collaboration (run for feedback even when proposals diverge)
+        if self.collaboration_rounds > 0:
             for event in self._run_collaboration(compatibility):
                 yield event
             
@@ -1280,7 +1317,7 @@ class Orchestrator:
             yield event
 
     def _run_collaboration(self, compatibility: Dict[str, Any]) -> Generator[Dict[str, Any], None, None]:
-        """Run collaboration rounds when proposals are compatible."""
+        """Run collaboration rounds for cross-proposal feedback."""
         overlap_areas = compatibility.get("overlap_areas", [])
         merge_strategy = compatibility.get("merge_strategy", "")
         compatible_pairs = compatibility.get("compatible_pairs", [])
@@ -1364,7 +1401,8 @@ class Orchestrator:
                     "worker_outputs": {
                         wid: {
                             "display_id": w.display_id,
-                            "summary": w.current_draft.summary if w.current_draft else None
+                            "summary": w.current_draft.summary if w.current_draft else None,
+                            "collaboration": collab_outputs.get(wid)
                         }
                         for wid, w in self.workers.items()
                     }
@@ -1462,7 +1500,8 @@ class Orchestrator:
                     "worker_outputs": {
                         wid: {
                             "display_id": w.display_id,
-                            "summary": w.current_draft.summary if w.current_draft else None
+                            "summary": w.current_draft.summary if w.current_draft else None,
+                            "collaboration": collab_outputs.get(wid)
                         }
                         for wid, w in self.workers.items()
                     }
@@ -1580,7 +1619,54 @@ class Orchestrator:
             # Store final round arguments for voting
             self._stage_outputs["arguments"] = all_arguments[-1] if all_arguments else {}
         
-        # Proceed to AI voting
+        for event in self._run_post_argumentation():
+            yield event
+
+    def _run_post_argumentation(self) -> Generator[Dict[str, Any], None, None]:
+        """Run compatibility check, collaboration, and voting after argumentation."""
+        # Stage 3: Compatibility Check (after argumentation, before collaboration)
+        self.current_stage = PipelineStage.COMPATIBILITY_CHECK
+        yield {"type": "stage_start", "stage": "compatibility_check"}
+
+        refined_proposals = {
+            worker_id: {"summary": worker.current_draft.summary}
+            for worker_id, worker in self.workers.items()
+            if worker.current_draft
+        }
+
+        compatibility = self.synthesizer.check_compatibility(refined_proposals)
+        self._compatibility_result = compatibility
+
+        synth_tokens = self.synthesizer.get_last_token_usage()
+        yield {
+            "type": "tokens_update",
+            "source": "synthesizer",
+            "tokens": synth_tokens,
+            "context_limit": self.synth_context_window
+        }
+
+        self.logger.log(
+            stage="compatibility_check",
+            agent_id="synthesizer",
+            input_text=str(refined_proposals),
+            output_text=str(compatibility),
+            memory_usage_mb=self.memory_monitor.get_memory_mb()
+        )
+
+        yield {
+            "type": "stage_complete",
+            "stage": "compatibility_check",
+            "compatibility": compatibility
+        }
+
+        # Stage 4: Collaboration (run for feedback even when proposals diverge)
+        if self.collaboration_rounds > 0:
+            for event in self._run_collaboration(compatibility):
+                yield event
+
+            if self._awaiting_collab_feedback:
+                return
+
         for event in self._run_voting():
             yield event
     

@@ -768,22 +768,28 @@
         const workers = window.aiCouncil?.state?.workers || state.workers || [];
         
         if (workers.length === 0) {
-            console.warn('No workers found in state. Checking config...');
-            // Try to reconstruct from config
+            // Try to reconstruct from config without warning in normal startup flows.
             const workerCount = window.aiCouncil?.state?.config?.worker_count || 2;
-            for (let i = 0; i < workerCount; i++) {
-                const workerNum = i + 1;
+            const fallbackWorkers = Array.from({ length: workerCount }, (_, i) => ({
+                id: `worker_${i + 1}`,
+                persona: { id: null, name: 'Default' }
+            }));
+            if (!state.workers || state.workers.length === 0) {
+                state.workers = fallbackWorkers;
+            }
+            fallbackWorkers.forEach((worker, index) => {
+                const workerNum = index + 1;
                 const card = document.createElement('div');
                 card.className = 'roster-member';
                 card.innerHTML = `
                     <div class="roster-avatar worker-${workerNum}">W${workerNum}</div>
                     <div class="roster-member-info">
                         <div class="roster-member-name">Worker ${workerNum}</div>
-                        <div class="roster-member-persona">Default</div>
+                        <div class="roster-member-persona">${escapeHtml(worker.persona?.name || 'Default')}</div>
                     </div>
                 `;
                 roster.appendChild(card);
-            }
+            });
         } else {
             workers.forEach((worker, index) => {
                 const workerNum = index + 1;
@@ -1018,6 +1024,18 @@
         return `<ul class="round-worker-list">${listItems}</ul>`;
     }
 
+    function renderKeyValueList(items, emptyLabel) {
+        const entries = items ? Object.entries(items) : [];
+        if (entries.length === 0) {
+            return `<div class="round-worker-empty">${escapeHtml(emptyLabel)}</div>`;
+        }
+
+        const listItems = entries
+            .map(([key, value]) => `<li><strong>${escapeHtml(key)}:</strong> ${escapeHtml(value)}</li>`)
+            .join('');
+        return `<ul class="round-worker-list">${listItems}</ul>`;
+    }
+
     function renderRefinementAnswers(answers) {
         const entries = answers ? Object.entries(answers) : [];
         if (entries.length === 0) {
@@ -1222,15 +1240,53 @@
                 const card = document.createElement('div');
                 card.className = 'round-worker-card';
                 
-                const summary = workerData.summary || 'Collaboration in progress';
+                const collaboration = workerData.collaboration || {};
+                const summary = collaboration.collaborative_summary || workerData.summary || 'Collaboration in progress';
                 const displayId = workerData.display_id || workerId;
+                const specificImprovements = Array.isArray(collaboration.specific_improvements) ? collaboration.specific_improvements : [];
+                const integratedMechanisms = collaboration.integrated_mechanisms && typeof collaboration.integrated_mechanisms === 'object'
+                    ? collaboration.integrated_mechanisms
+                    : {};
+                const resolvedTensions = Array.isArray(collaboration.resolved_tensions) ? collaboration.resolved_tensions : [];
+                const newInsights = Array.isArray(collaboration.new_insights) ? collaboration.new_insights : [];
+                const confidence = typeof collaboration.confidence === 'number' ? collaboration.confidence : null;
+                const collabSections = [renderRefinementSection(
+                        'Specific improvements',
+                        renderRefinementList(specificImprovements, 'No specific improvements listed.')
+                    ),
+                    renderRefinementSection(
+                        'Integrated mechanisms',
+                        renderKeyValueList(integratedMechanisms, 'No integrated mechanisms listed.')
+                    ),
+                    renderRefinementSection(
+                        'Resolved tensions',
+                        renderRefinementList(resolvedTensions, 'No resolved tensions listed.')
+                    ),
+                    renderRefinementSection(
+                        'New insights',
+                        renderRefinementList(newInsights, 'No new insights listed.')
+                    ),
+                    renderArgumentTextSection(
+                        'Confidence',
+                        confidence !== null ? confidence.toFixed(2) : '',
+                        'No confidence provided.'
+                    )
+                ];
                 
                 card.innerHTML = `
                     <div class="round-worker-header">
                         <span class="round-worker-name">${escapeHtml(displayId)}</span>
                         <span class="message-stage-tag">collaboration</span>
                     </div>
-                    <div class="round-worker-output">${escapeHtml(summary)}</div>
+
+                    <div class="round-worker-output">
+                        <div class="round-worker-output-label">Summary</div>
+                        <div class="round-worker-output-text">${escapeHtml(summary)}</div>
+                    </div>
+                    <div class="round-worker-refinements">
+                        ${collabSections.join('')}
+                    </div>
+                    
                     <div class="round-worker-feedback">
                         <textarea 
                             data-worker="${workerId}"
@@ -1341,7 +1397,9 @@
         
         // Update continue button text
         const continueBtn = document.getElementById('btn-continue-argument');
-        if (event.round >= event.total_rounds - 1) {
+        const roundNumber = Number(event.round) || 0;
+        const total = Number(event.total_rounds) || 0;
+        if (roundNumber >= total && total > 0) {
             continueBtn.innerHTML = `
                 Proceed to Voting
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1350,7 +1408,7 @@
             `;
         } else {
             continueBtn.innerHTML = `
-                Continue to Round ${event.round + 1}
+                Continue Argumentation
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="9 18 15 12 9 6"/>
                 </svg>
