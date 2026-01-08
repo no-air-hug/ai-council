@@ -377,7 +377,11 @@ class Orchestrator:
                         output_text=refinement.raw_text,
                         persona_id=worker.persona.id if worker.persona else None,
                         persona_name=worker.persona.name if worker.persona else None,
-                        memory_usage_mb=self.memory_monitor.get_memory_mb()
+                        memory_usage_mb=self.memory_monitor.get_memory_mb(),
+                        metadata={
+                            "round": loop + 1,
+                            "stage_label": f"worker_refinement_{loop + 1}"
+                        }
                     )
 
                 refinements[worker_id] = refinement.to_dict()
@@ -1007,7 +1011,11 @@ class Orchestrator:
                             output_text=refinement.raw_text,
                             persona_id=worker.persona.id if worker.persona else None,
                             persona_name=worker.persona.name if worker.persona else None,
-                            memory_usage_mb=self.memory_monitor.get_memory_mb()
+                            memory_usage_mb=self.memory_monitor.get_memory_mb(),
+                            metadata={
+                                "round": loop + 1,
+                                "stage_label": f"worker_refinement_{loop + 1}"
+                            }
                         )
 
                     refinements[worker_id] = refinement.to_dict()
