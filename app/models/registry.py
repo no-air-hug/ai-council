@@ -81,6 +81,24 @@ class ModelRegistry:
             context_window=mode_config.synthesizer.context_window,
             max_output_tokens=mode_config.synthesizer.max_output_tokens
         )
+
+    def get_architect_model(self) -> ModelSpec:
+        """Get the model specification for the architect."""
+        mode_config = self.config.mode_config
+        return ModelSpec(
+            name=mode_config.architect.model,
+            context_window=mode_config.architect.context_window,
+            max_output_tokens=mode_config.architect.max_output_tokens
+        )
+
+    def get_engineer_model(self) -> ModelSpec:
+        """Get the model specification for the engineer."""
+        mode_config = self.config.mode_config
+        return ModelSpec(
+            name=mode_config.engineer.model,
+            context_window=mode_config.engineer.context_window,
+            max_output_tokens=mode_config.engineer.max_output_tokens
+        )
     
     def get_model_for_role(self, role: str) -> ModelSpec:
         """
@@ -94,8 +112,11 @@ class ModelRegistry:
         """
         if role == "synthesizer":
             return self.get_synthesizer_model()
-        else:
-            return self.get_worker_model()
+        if role == "architect":
+            return self.get_architect_model()
+        if role == "engineer":
+            return self.get_engineer_model()
+        return self.get_worker_model()
     
     def find_fallback_model(self, target_size: str) -> Optional[str]:
         """
@@ -140,10 +161,17 @@ class ModelRegistry:
             Dict mapping role to availability status.
         """
         if not self._available_models:
-            return {"workers": False, "synthesizer": False}
+            return {
+                "workers": False,
+                "synthesizer": False,
+                "architect": False,
+                "engineer": False
+            }
         
         worker_model = self.get_worker_model().name
         synth_model = self.get_synthesizer_model().name
+        architect_model = self.get_architect_model().name
+        engineer_model = self.get_engineer_model().name
         
         def is_available(model_name: str) -> bool:
             return any(
@@ -153,7 +181,9 @@ class ModelRegistry:
         
         return {
             "workers": is_available(worker_model),
-            "synthesizer": is_available(synth_model)
+            "synthesizer": is_available(synth_model),
+            "architect": is_available(architect_model),
+            "engineer": is_available(engineer_model)
         }
     
     def get_context_limit(self, role: str) -> int:
@@ -165,5 +195,4 @@ class ModelRegistry:
         """Get output token limit for a role."""
         spec = self.get_model_for_role(role)
         return spec.max_output_tokens
-
 

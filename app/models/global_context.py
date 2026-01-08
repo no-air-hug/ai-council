@@ -20,12 +20,18 @@ class GlobalContext:
     prompt: Optional[str] = None
     created_at: str = field(default_factory=_utc_timestamp)
     proposals: List[Dict[str, Any]] = field(default_factory=list)
+    questions: List[Dict[str, Any]] = field(default_factory=list)
     refinements: List[Dict[str, Any]] = field(default_factory=list)
     critiques: List[Dict[str, Any]] = field(default_factory=list)
     rebuttals: List[Dict[str, Any]] = field(default_factory=list)
     collaboration_deltas: List[Dict[str, Any]] = field(default_factory=list)
+    compatibility_checks: List[Dict[str, Any]] = field(default_factory=list)
+    candidates: List[Dict[str, Any]] = field(default_factory=list)
+    voting: List[Dict[str, Any]] = field(default_factory=list)
     axioms: List[Dict[str, Any]] = field(default_factory=list)
     user_feedback: List[Dict[str, Any]] = field(default_factory=list)
+    final_output: List[Dict[str, Any]] = field(default_factory=list)
+    patch_notes: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -33,12 +39,18 @@ class GlobalContext:
             "prompt": self.prompt,
             "created_at": self.created_at,
             "proposals": self.proposals,
+            "questions": self.questions,
             "refinements": self.refinements,
             "critiques": self.critiques,
             "rebuttals": self.rebuttals,
             "collaboration_deltas": self.collaboration_deltas,
+            "compatibility_checks": self.compatibility_checks,
+            "candidates": self.candidates,
+            "voting": self.voting,
             "axioms": self.axioms,
             "user_feedback": self.user_feedback,
+            "final_output": self.final_output,
+            "patch_notes": self.patch_notes,
         }
 
     def add_entry(
