@@ -768,22 +768,28 @@
         const workers = window.aiCouncil?.state?.workers || state.workers || [];
         
         if (workers.length === 0) {
-            console.warn('No workers found in state. Checking config...');
-            // Try to reconstruct from config
+            // Try to reconstruct from config without warning in normal startup flows.
             const workerCount = window.aiCouncil?.state?.config?.worker_count || 2;
-            for (let i = 0; i < workerCount; i++) {
-                const workerNum = i + 1;
+            const fallbackWorkers = Array.from({ length: workerCount }, (_, i) => ({
+                id: `worker_${i + 1}`,
+                persona: { id: null, name: 'Default' }
+            }));
+            if (!state.workers || state.workers.length === 0) {
+                state.workers = fallbackWorkers;
+            }
+            fallbackWorkers.forEach((worker, index) => {
+                const workerNum = index + 1;
                 const card = document.createElement('div');
                 card.className = 'roster-member';
                 card.innerHTML = `
                     <div class="roster-avatar worker-${workerNum}">W${workerNum}</div>
                     <div class="roster-member-info">
                         <div class="roster-member-name">Worker ${workerNum}</div>
-                        <div class="roster-member-persona">Default</div>
+                        <div class="roster-member-persona">${escapeHtml(worker.persona?.name || 'Default')}</div>
                     </div>
                 `;
                 roster.appendChild(card);
-            }
+            });
         } else {
             workers.forEach((worker, index) => {
                 const workerNum = index + 1;
