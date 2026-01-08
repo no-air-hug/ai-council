@@ -19,26 +19,47 @@ class GlobalContext:
     session_id: Optional[str] = None
     prompt: Optional[str] = None
     created_at: str = field(default_factory=_utc_timestamp)
-    proposals: List[Dict[str, Any]] = field(default_factory=list)
-    refinements: List[Dict[str, Any]] = field(default_factory=list)
-    critiques: List[Dict[str, Any]] = field(default_factory=list)
-    rebuttals: List[Dict[str, Any]] = field(default_factory=list)
-    collaboration_deltas: List[Dict[str, Any]] = field(default_factory=list)
-    axioms: List[Dict[str, Any]] = field(default_factory=list)
-    user_feedback: List[Dict[str, Any]] = field(default_factory=list)
+    workers: Dict[str, Any] = field(default_factory=dict)
+    questions: Dict[str, Any] = field(default_factory=dict)
+    compatibility: Dict[str, Any] = field(default_factory=dict)
+    collaboration: Dict[str, Any] = field(default_factory=dict)
+    candidates: List[Dict[str, Any]] = field(default_factory=list)
+    voting: Dict[str, Any] = field(default_factory=dict)
+    axioms: Dict[str, Any] = field(default_factory=dict)
+    user_feedback: Dict[str, Any] = field(default_factory=dict)
+    final_output: Dict[str, Any] = field(default_factory=dict)
+    patch_notes: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "session_id": self.session_id,
             "prompt": self.prompt,
             "created_at": self.created_at,
-            "proposals": self.proposals,
-            "refinements": self.refinements,
-            "critiques": self.critiques,
-            "rebuttals": self.rebuttals,
-            "collaboration_deltas": self.collaboration_deltas,
+            "workers": self.workers,
+            "questions": self.questions,
+            "compatibility": self.compatibility,
+            "collaboration": self.collaboration,
+            "candidates": self.candidates,
+            "voting": self.voting,
             "axioms": self.axioms,
             "user_feedback": self.user_feedback,
+            "final_output": self.final_output,
+            "patch_notes": self.patch_notes,
+        }
+
+    def allowed_sections(self) -> set:
+        """Return allowed sections for architect updates."""
+        return {
+            "workers",
+            "questions",
+            "compatibility",
+            "collaboration",
+            "candidates",
+            "voting",
+            "axioms",
+            "user_feedback",
+            "final_output",
+            "patch_notes",
         }
 
     def add_entry(
@@ -55,30 +76,11 @@ class GlobalContext:
             "payload": payload,
         }
         target = getattr(self, section)
-        target.append(entry)
+        if isinstance(target, list):
+            target.append(entry)
+            return entry
+        if isinstance(target, dict):
+            target.update(payload)
+            return entry
+        setattr(self, section, payload)
         return entry
-
-    def add_proposal(self, payload: Dict[str, Any], provenance: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return self.add_entry("proposals", payload, provenance)
-
-    def add_refinement(self, payload: Dict[str, Any], provenance: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return self.add_entry("refinements", payload, provenance)
-
-    def add_critique(self, payload: Dict[str, Any], provenance: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return self.add_entry("critiques", payload, provenance)
-
-    def add_rebuttal(self, payload: Dict[str, Any], provenance: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return self.add_entry("rebuttals", payload, provenance)
-
-    def add_collaboration_delta(
-        self, payload: Dict[str, Any], provenance: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        return self.add_entry("collaboration_deltas", payload, provenance)
-
-    def add_axiom(self, payload: Dict[str, Any], provenance: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return self.add_entry("axioms", payload, provenance)
-
-    def add_user_feedback(
-        self, payload: Dict[str, Any], provenance: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        return self.add_entry("user_feedback", payload, provenance)

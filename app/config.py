@@ -36,6 +36,22 @@ class SynthesizerConfig:
 
 
 @dataclass
+class ArchitectConfig:
+    """Architect agent configuration."""
+    model: str
+    context_window: int
+    max_output_tokens: int
+
+
+@dataclass
+class EngineerConfig:
+    """Engineer agent configuration."""
+    model: str
+    context_window: int
+    max_output_tokens: int
+
+
+@dataclass
 class TokenLimits:
     """Token limits for various stages."""
     worker_draft: int
@@ -80,6 +96,8 @@ class ModeConfig:
     description: str
     workers: WorkerConfig
     synthesizer: SynthesizerConfig
+    architect: ArchitectConfig
+    engineer: EngineerConfig
     token_limits: TokenLimits
     memory: MemoryConfig
     pipeline: PipelineConfig
@@ -164,6 +182,8 @@ class ConfigManager:
             description=data["description"],
             workers=WorkerConfig(**data["workers"]),
             synthesizer=SynthesizerConfig(**data["synthesizer"]),
+            architect=ArchitectConfig(**data["architect"]),
+            engineer=EngineerConfig(**data["engineer"]),
             token_limits=TokenLimits(**data["token_limits"]),
             memory=MemoryConfig(**data["memory"]),
             pipeline=PipelineConfig(**data["pipeline"])
@@ -246,4 +266,3 @@ def get_config_manager(base_path: Optional[Path] = None) -> ConfigManager:
 def get_config() -> AppConfig:
     """Get the current application configuration."""
     return get_config_manager().config
-
