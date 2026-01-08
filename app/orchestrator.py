@@ -1272,9 +1272,8 @@ class Orchestrator:
             "compatibility": compatibility
         }
         
-        # Stage 4: Collaboration (if compatible or partially compatible)
-        is_compatible = compatibility.get("compatibility") in ["compatible", "partially_compatible"]
-        if is_compatible and self.collaboration_rounds > 0:
+        # Stage 4: Collaboration (run for feedback even when proposals diverge)
+        if self.collaboration_rounds > 0:
             for event in self._run_collaboration(compatibility):
                 yield event
             
@@ -1288,7 +1287,7 @@ class Orchestrator:
             yield event
 
     def _run_collaboration(self, compatibility: Dict[str, Any]) -> Generator[Dict[str, Any], None, None]:
-        """Run collaboration rounds when proposals are compatible."""
+        """Run collaboration rounds for cross-proposal feedback."""
         overlap_areas = compatibility.get("overlap_areas", [])
         merge_strategy = compatibility.get("merge_strategy", "")
         compatible_pairs = compatibility.get("compatible_pairs", [])
