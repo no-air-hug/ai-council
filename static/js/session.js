@@ -1018,6 +1018,18 @@
         return `<ul class="round-worker-list">${listItems}</ul>`;
     }
 
+    function renderKeyValueList(items, emptyLabel) {
+        const entries = items ? Object.entries(items) : [];
+        if (entries.length === 0) {
+            return `<div class="round-worker-empty">${escapeHtml(emptyLabel)}</div>`;
+        }
+
+        const listItems = entries
+            .map(([key, value]) => `<li><strong>${escapeHtml(key)}:</strong> ${escapeHtml(value)}</li>`)
+            .join('');
+        return `<ul class="round-worker-list">${listItems}</ul>`;
+    }
+
     function renderRefinementAnswers(answers) {
         const entries = answers ? Object.entries(answers) : [];
         if (entries.length === 0) {
@@ -1222,15 +1234,47 @@
                 const card = document.createElement('div');
                 card.className = 'round-worker-card';
                 
-                const summary = workerData.summary || 'Collaboration in progress';
+                const collaboration = workerData.collaboration || {};
+                const summary = collaboration.collaborative_summary || workerData.summary || 'Collaboration in progress';
                 const displayId = workerData.display_id || workerId;
+                const specificImprovements = Array.isArray(collaboration.specific_improvements) ? collaboration.specific_improvements : [];
+                const integratedMechanisms = collaboration.integrated_mechanisms && typeof collaboration.integrated_mechanisms === 'object'
+                    ? collaboration.integrated_mechanisms
+                    : {};
+                const resolvedTensions = Array.isArray(collaboration.resolved_tensions) ? collaboration.resolved_tensions : [];
+                const newInsights = Array.isArray(collaboration.new_insights) ? collaboration.new_insights : [];
+                const confidence = typeof collaboration.confidence === 'number' ? collaboration.confidence : null;
+                const collabSections = [
+                    renderRefinementSection('Summary', `<p>${escapeHtml(summary)}</p>`, true),
+                    renderRefinementSection(
+                        'Specific improvements',
+                        renderRefinementList(specificImprovements, 'No specific improvements listed.')
+                    ),
+                    renderRefinementSection(
+                        'Integrated mechanisms',
+                        renderKeyValueList(integratedMechanisms, 'No integrated mechanisms listed.')
+                    ),
+                    renderRefinementSection(
+                        'Resolved tensions',
+                        renderRefinementList(resolvedTensions, 'No resolved tensions listed.')
+                    ),
+                    renderRefinementSection(
+                        'New insights',
+                        renderRefinementList(newInsights, 'No new insights listed.')
+                    ),
+                    renderArgumentTextSection(
+                        'Confidence',
+                        confidence !== null ? confidence.toFixed(2) : '',
+                        'No confidence provided.'
+                    )
+                ];
                 
                 card.innerHTML = `
                     <div class="round-worker-header">
                         <span class="round-worker-name">${escapeHtml(displayId)}</span>
                         <span class="message-stage-tag">collaboration</span>
                     </div>
-                    <div class="round-worker-output">${escapeHtml(summary)}</div>
+                    <div class="round-worker-output">${collabSections.join('')}</div>
                     <div class="round-worker-feedback">
                         <textarea 
                             data-worker="${workerId}"

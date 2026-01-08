@@ -1364,7 +1364,8 @@ class Orchestrator:
                     "worker_outputs": {
                         wid: {
                             "display_id": w.display_id,
-                            "summary": w.current_draft.summary if w.current_draft else None
+                            "summary": w.current_draft.summary if w.current_draft else None,
+                            "collaboration": collab_outputs.get(wid)
                         }
                         for wid, w in self.workers.items()
                     }
