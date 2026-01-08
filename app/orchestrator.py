@@ -2596,6 +2596,8 @@ class Orchestrator:
         log_entries = []
         if self.logger:
             for entry in self.logger.get_entries():
+                if entry.stage == "global_context_update":
+                    continue
                 log_entries.append({
                     "timestamp": entry.timestamp,
                     "stage": entry.stage,
